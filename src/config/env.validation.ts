@@ -1,4 +1,5 @@
 import * as Joi from 'joi';
+import { DEFAULT_GROQ_MODEL } from './configuration';
 
 export const envValidationSchema = Joi.object({
   NETWORK: Joi.string().valid('testnet', 'mainnet').default('testnet'),
@@ -20,7 +21,8 @@ export const envValidationSchema = Joi.object({
   CLOUDINARY_API_KEY: Joi.string().allow('').optional(),
   CLOUDINARY_API_SECRET: Joi.string().allow('').optional(),
 
-  GROQ_API_KEY: Joi.string().allow('').optional(),
+  GROQ_API_KEY: Joi.string().required(),
+  GROQ_MODEL: Joi.string().default(DEFAULT_GROQ_MODEL),
   WEBHOOK_SECRET: Joi.string().allow('').optional(),
 
   ANALYSIS_CACHE_TTL_HOURS: Joi.number().default(48),

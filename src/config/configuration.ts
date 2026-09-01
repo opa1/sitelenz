@@ -1,5 +1,11 @@
 export type Network = 'testnet' | 'mainnet';
 
+// llama-3.3-70b-versatile has been removed from Groq's model catalog
+// (confirmed via a live models.list() call — 404 model_not_found on every
+// request). openai/gpt-oss-120b is Groq's current flagship large
+// open-weight model and the closest replacement; override via GROQ_MODEL.
+export const DEFAULT_GROQ_MODEL = 'openai/gpt-oss-120b';
+
 export interface NetworkConfig {
   algorandNodeUrl: string;
   x402FacilitatorUrl: string;
@@ -23,6 +29,7 @@ export interface AppConfiguration {
   };
   groq: {
     apiKey: string;
+    model: string;
   };
   webhook: {
     secret: string;
@@ -67,6 +74,7 @@ export default (): AppConfiguration => ({
   },
   groq: {
     apiKey: process.env.GROQ_API_KEY ?? '',
+    model: process.env.GROQ_MODEL ?? DEFAULT_GROQ_MODEL,
   },
   webhook: {
     secret: process.env.WEBHOOK_SECRET ?? '',

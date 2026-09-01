@@ -7,6 +7,7 @@ import { SecurityModule } from '../analyzers/security/security.module';
 import { PerformanceModule } from '../analyzers/performance/performance.module';
 import { BusinessModule } from '../analyzers/business/business.module';
 import { UxModule } from '../analyzers/ux/ux.module';
+import { AiModule } from '../ai/ai.module';
 import { AnalysisProcessor } from './analysis.processor';
 
 @Module({
@@ -19,6 +20,7 @@ import { AnalysisProcessor } from './analysis.processor';
     PerformanceModule,
     BusinessModule,
     UxModule,
+    AiModule,
   ],
   providers: [AnalysisProcessor],
 })

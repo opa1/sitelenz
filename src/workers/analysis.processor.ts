@@ -1,4 +1,4 @@
-import { Logger } from '@nestjs/common';
+import { Inject, Logger } from '@nestjs/common';
 import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { Job } from 'bullmq';
 import type { BrowserContext } from 'playwright';
@@ -21,6 +21,9 @@ import type { SecurityResult } from '../analyzers/security/security-result.inter
 import type { PerformanceResult } from '../analyzers/performance/performance-result.interface';
 import type { BusinessResult } from '../analyzers/business/business-result.interface';
 import type { UxResult } from '../analyzers/ux/ux-result.interface';
+import { AiInputBuilderService } from '../ai/ai-input-builder.service';
+import { AI_PROVIDER } from '../ai/ai-provider.interface';
+import type { AIProvider, AiResult } from '../ai/ai-provider.interface';
 import { ANALYSIS_QUEUE } from '../queue/queue.constants';
 import type { AnalysisJobData } from '../queue/analysis-job.interface';
 import type { AnalysisType } from '@prisma/client';
@@ -40,7 +43,7 @@ interface AnalysisReport {
   performance: PerformanceResult;
   business: BusinessResult;
   ux: UxResult;
-  ai: Record<string, never>;
+  ai: AiResult;
   screenshots: ScreenshotResult[];
   metadata: {
     analysisCompletedAt: string;
@@ -84,6 +87,8 @@ export class AnalysisProcessor extends WorkerHost {
     private readonly performanceAnalyzer: PerformanceAnalyzerService,
     private readonly businessAnalyzer: BusinessAnalyzerService,
     private readonly uxAnalyzer: UxAnalyzerService,
+    private readonly aiInputBuilder: AiInputBuilderService,
+    @Inject(AI_PROVIDER) private readonly aiProvider: AIProvider,
   ) {
     super();
   }
@@ -167,7 +172,27 @@ export class AnalysisProcessor extends WorkerHost {
       );
 
       await this.updateStage(analysisId, PROGRESS_STAGE.AI_ANALYSIS);
-      const aiResult = {};
+      let aiResult: AiResult;
+      try {
+        const condensedInput = this.aiInputBuilder.build(
+          {
+            technology: technologyResult,
+            seo: seoResult,
+            security: securityResult,
+            performance: performanceResult,
+            business: businessResult,
+            ux: uxResult,
+          },
+          { deep },
+        );
+        aiResult = await this.aiProvider.interpret(condensedInput, { deep });
+      } catch (error) {
+        this.logger.error(
+          `AI interpretation failed for analysis ${analysisId}: ${(error as Error).message}`,
+          (error as Error).stack,
+        );
+        aiResult = this.buildFallbackAiResult();
+      }
 
       await this.updateStage(analysisId, PROGRESS_STAGE.STORING_RESULTS);
       const report: AnalysisReport = {
@@ -293,6 +318,20 @@ export class AnalysisProcessor extends WorkerHost {
     } finally {
       await page.close().catch(() => undefined);
     }
+  }
+
+  private buildFallbackAiResult(): AiResult {
+    return {
+      summary: 'AI interpretation unavailable',
+      strengths: [],
+      weaknesses: [],
+      notableFindings: [],
+      technicalInterpretation: '',
+      businessInterpretation: '',
+      recommendations: [],
+      modelUsed: 'fallback',
+      interpretedAt: new Date().toISOString(),
+    };
   }
 
   private updateStage(analysisId: string, stage: string): Promise<unknown> {

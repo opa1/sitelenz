@@ -57,6 +57,10 @@ export class AppConfigService {
     return this.configService.get('groq', { infer: true }).apiKey;
   }
 
+  get groqModel(): string {
+    return this.configService.get('groq', { infer: true }).model;
+  }
+
   get webhookSecret(): string {
     return this.configService.get('webhook', { infer: true }).secret;
   }
