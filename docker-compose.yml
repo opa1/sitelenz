@@ -1,0 +1,26 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: sitelenz-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: sitelenz
+      POSTGRES_PASSWORD: sitelenz
+      POSTGRES_DB: sitelenz
+    ports:
+      - '5432:5432'
+    volumes:
+      - sitelenz_postgres_data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7
+    container_name: sitelenz-redis
+    restart: unless-stopped
+    ports:
+      - '6379:6379'
+    volumes:
+      - sitelenz_redis_data:/data
+
+volumes:
+  sitelenz_postgres_data:
+  sitelenz_redis_data:

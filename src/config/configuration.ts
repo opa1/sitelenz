@@ -1,0 +1,83 @@
+export type Network = 'testnet' | 'mainnet';
+
+export interface NetworkConfig {
+  algorandNodeUrl: string;
+  x402FacilitatorUrl: string;
+  payToAddress: string;
+  usdcAssetId: string;
+}
+
+export interface AppConfiguration {
+  network: Network;
+  networks: Record<Network, NetworkConfig>;
+  database: {
+    url: string;
+  };
+  redis: {
+    url: string;
+  };
+  cloudinary: {
+    cloudName: string;
+    apiKey: string;
+    apiSecret: string;
+  };
+  groq: {
+    apiKey: string;
+  };
+  webhook: {
+    secret: string;
+  };
+  analysis: {
+    cacheTtlHours: number;
+    maxConcurrentAnalyses: number;
+    timeoutMs: number;
+  };
+  x402: {
+    priceStandardUsd: number;
+    priceDeepUsd: number;
+  };
+}
+
+export default (): AppConfiguration => ({
+  network: (process.env.NETWORK as Network) ?? 'testnet',
+  networks: {
+    testnet: {
+      algorandNodeUrl: process.env.TESTNET_ALGORAND_NODE_URL ?? '',
+      x402FacilitatorUrl: process.env.TESTNET_X402_FACILITATOR_URL ?? '',
+      payToAddress: process.env.TESTNET_PAY_TO_ADDRESS ?? '',
+      usdcAssetId: process.env.TESTNET_USDC_ASSET_ID ?? '',
+    },
+    mainnet: {
+      algorandNodeUrl: process.env.MAINNET_ALGORAND_NODE_URL ?? '',
+      x402FacilitatorUrl: process.env.MAINNET_X402_FACILITATOR_URL ?? '',
+      payToAddress: process.env.MAINNET_PAY_TO_ADDRESS ?? '',
+      usdcAssetId: process.env.MAINNET_USDC_ASSET_ID ?? '',
+    },
+  },
+  database: {
+    url: process.env.DATABASE_URL ?? '',
+  },
+  redis: {
+    url: process.env.REDIS_URL ?? '',
+  },
+  cloudinary: {
+    cloudName: process.env.CLOUDINARY_CLOUD_NAME ?? '',
+    apiKey: process.env.CLOUDINARY_API_KEY ?? '',
+    apiSecret: process.env.CLOUDINARY_API_SECRET ?? '',
+  },
+  groq: {
+    apiKey: process.env.GROQ_API_KEY ?? '',
+  },
+  webhook: {
+    secret: process.env.WEBHOOK_SECRET ?? '',
+  },
+  analysis: {
+    cacheTtlHours: Number(process.env.ANALYSIS_CACHE_TTL_HOURS ?? 48),
+    maxConcurrentAnalyses: Number(process.env.MAX_CONCURRENT_ANALYSES ?? 3),
+    timeoutMs: Number(process.env.ANALYSIS_TIMEOUT_MS ?? 120000),
+  },
+  x402: {
+    priceStandardUsd: Number(process.env.X402_PRICE_STANDARD_USD ?? 1),
+    priceDeepUsd: Number(process.env.X402_PRICE_DEEP_USD ?? 2),
+  },
+});
