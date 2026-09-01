@@ -15,8 +15,38 @@ import { SecurityAnalyzerService } from '../analyzers/security/security-analyzer
 import { PerformanceAnalyzerService } from '../analyzers/performance/performance-analyzer.service';
 import { BusinessAnalyzerService } from '../analyzers/business/business-analyzer.service';
 import { UxAnalyzerService } from '../analyzers/ux/ux-analyzer.service';
+import type { TechnologyResult } from '../analyzers/technology/technology-result.interface';
+import type { SeoResult } from '../analyzers/seo/seo-result.interface';
+import type { SecurityResult } from '../analyzers/security/security-result.interface';
+import type { PerformanceResult } from '../analyzers/performance/performance-result.interface';
+import type { BusinessResult } from '../analyzers/business/business-result.interface';
+import type { UxResult } from '../analyzers/ux/ux-result.interface';
 import { ANALYSIS_QUEUE } from '../queue/queue.constants';
 import type { AnalysisJobData } from '../queue/analysis-job.interface';
+import type { AnalysisType } from '@prisma/client';
+
+interface AnalysisReport {
+  analysisId: string;
+  url: string;
+  analysisType: AnalysisType;
+  website: {
+    finalUrl: string;
+    statusCode: number;
+    redirectChain: string[];
+  };
+  technology: TechnologyResult;
+  seo: SeoResult;
+  security: SecurityResult;
+  performance: PerformanceResult;
+  business: BusinessResult;
+  ux: UxResult;
+  ai: Record<string, never>;
+  screenshots: ScreenshotResult[];
+  metadata: {
+    analysisCompletedAt: string;
+    analysisDurationMs: number;
+  };
+}
 
 const PROGRESS_STAGE = {
   LAUNCHING_BROWSER: 'launching_browser',
@@ -140,7 +170,7 @@ export class AnalysisProcessor extends WorkerHost {
       const aiResult = {};
 
       await this.updateStage(analysisId, PROGRESS_STAGE.STORING_RESULTS);
-      const report = {
+      const report: AnalysisReport = {
         analysisId,
         url,
         analysisType,
