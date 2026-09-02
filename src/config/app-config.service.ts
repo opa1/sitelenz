@@ -8,6 +8,10 @@ export class AppConfigService {
     private readonly configService: ConfigService<AppConfiguration, true>,
   ) {}
 
+  get version(): string {
+    return this.configService.get('version', { infer: true });
+  }
+
   get network(): Network {
     return this.configService.get('network', { infer: true });
   }

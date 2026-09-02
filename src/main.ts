@@ -28,7 +28,13 @@ process.on('unhandledRejection', (reason) => {
 async function bootstrap() {
   const app = await NestFactory.create<NestFastifyApplication>(
     AppModule,
-    new FastifyAdapter(),
+    // trustProxy: deployed behind a platform load balancer (Railway/Render/
+    // etc.) — without it, req.ip is always the proxy's address (breaking
+    // per-IP rate limiting) and req.protocol/hostname report the internal
+    // http:// hop instead of the real public https:// origin (which the
+    // x402 guard uses to build the resource URL the GoPlausible facilitator
+    // catalogs for Bazaar discovery).
+    new FastifyAdapter({ trustProxy: true }),
   );
 
   app.useGlobalFilters(new AllExceptionsFilter());

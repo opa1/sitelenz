@@ -8,7 +8,9 @@ import { PerformanceModule } from '../analyzers/performance/performance.module';
 import { BusinessModule } from '../analyzers/business/business.module';
 import { UxModule } from '../analyzers/ux/ux.module';
 import { AiModule } from '../ai/ai.module';
+import { WebhooksModule } from '../webhooks/webhooks.module';
 import { AnalysisProcessor } from './analysis.processor';
+import { WebhookProcessor } from './webhook.processor';
 
 @Module({
   imports: [
@@ -21,7 +23,8 @@ import { AnalysisProcessor } from './analysis.processor';
     BusinessModule,
     UxModule,
     AiModule,
+    WebhooksModule,
   ],
-  providers: [AnalysisProcessor],
+  providers: [AnalysisProcessor, WebhookProcessor],
 })
 export class WorkersModule {}

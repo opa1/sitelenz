@@ -1,4 +1,26 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+
 export type Network = 'testnet' | 'mainnet';
+
+/**
+ * `process.cwd()` rather than a `__dirname`-relative path: Procfile/platform
+ * start commands (`node dist/src/main.js`) and `npm run start:dev` (ts-node
+ * against `src/`) both run with the working directory set to the repo root,
+ * but the two entry files sit at different depths from that root — a fixed
+ * number of `../` segments can't reach package.json correctly from both.
+ * `npm_package_version` isn't used because Procfile-style platforms invoke
+ * the start command directly, not through `npm run`, so it wouldn't be set.
+ */
+function readPackageVersion(): string {
+  try {
+    const raw = readFileSync(join(process.cwd(), 'package.json'), 'utf8');
+    const parsed = JSON.parse(raw) as { version?: string };
+    return parsed.version ?? '0.0.0';
+  } catch {
+    return '0.0.0';
+  }
+}
 
 // llama-3.3-70b-versatile has been removed from Groq's model catalog
 // (confirmed via a live models.list() call — 404 model_not_found on every
@@ -14,6 +36,7 @@ export interface NetworkConfig {
 }
 
 export interface AppConfiguration {
+  version: string;
   network: Network;
   networks: Record<Network, NetworkConfig>;
   database: {
@@ -46,6 +69,7 @@ export interface AppConfiguration {
 }
 
 export default (): AppConfiguration => ({
+  version: readPackageVersion(),
   network: (process.env.NETWORK as Network) ?? 'testnet',
   networks: {
     testnet: {

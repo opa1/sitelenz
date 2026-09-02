@@ -14,6 +14,7 @@ import { AppConfigService } from '../config';
 import {
   ALGORAND_MAINNET_NETWORK,
   ALGORAND_TESTNET_NETWORK,
+  X402_GLOBAL_CHALLENGE_TAG,
   X402_MAX_TIMEOUT_SECONDS,
   X402_PAYMENT_HEADER,
   X402_RESOURCE_SERVER,
@@ -47,13 +48,27 @@ export class X402Guard implements CanActivate {
       network,
       price: `$${priceUsd}`,
       maxTimeoutSeconds: X402_MAX_TIMEOUT_SECONDS,
-      extra: { asset: networkConfig.usdcAssetId },
+      // `x402-global-challenge` is the Algorand Global x402 Challenge's
+      // leaderboard tag. See the research note in x402.module.ts — the
+      // facilitator reads this from `extra.tag` on the built payment
+      // requirement (confirmed against a live, already-tagged resource in
+      // its own discovery catalog).
+      extra: {
+        asset: networkConfig.usdcAssetId,
+        tag: X402_GLOBAL_CHALLENGE_TAG,
+      },
     };
 
     const requirements =
       await this.resourceServer.buildPaymentRequirements(resourceConfig);
     const resourceInfo = {
-      url: request.url,
+      // Absolute, not just the path — every resource observed in the
+      // facilitator's live discovery catalog is cataloged under a full
+      // https://host/path URL. Relies on Fastify's trustProxy (main.ts) to
+      // report the real public protocol/host when behind a load balancer.
+      // `request.host` (not `.hostname`) — hostname alone drops the port,
+      // which broke locally on any non-default port.
+      url: `${request.protocol}://${request.host}${request.url}`,
       description: `SiteLenz ${String(analysisType)} analysis`,
       mimeType: 'application/json',
     };

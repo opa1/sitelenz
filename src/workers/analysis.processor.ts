@@ -15,41 +15,16 @@ import { SecurityAnalyzerService } from '../analyzers/security/security-analyzer
 import { PerformanceAnalyzerService } from '../analyzers/performance/performance-analyzer.service';
 import { BusinessAnalyzerService } from '../analyzers/business/business-analyzer.service';
 import { UxAnalyzerService } from '../analyzers/ux/ux-analyzer.service';
-import type { TechnologyResult } from '../analyzers/technology/technology-result.interface';
-import type { SeoResult } from '../analyzers/seo/seo-result.interface';
-import type { SecurityResult } from '../analyzers/security/security-result.interface';
-import type { PerformanceResult } from '../analyzers/performance/performance-result.interface';
-import type { BusinessResult } from '../analyzers/business/business-result.interface';
-import type { UxResult } from '../analyzers/ux/ux-result.interface';
 import { AiInputBuilderService } from '../ai/ai-input-builder.service';
 import { AI_PROVIDER } from '../ai/ai-provider.interface';
 import type { AIProvider, AiResult } from '../ai/ai-provider.interface';
+import { WebhookService } from '../webhooks/webhook.service';
+import type {
+  AnalysisReport,
+  ScreenshotResult,
+} from '../common/interfaces/analysis-report.interface';
 import { ANALYSIS_QUEUE } from '../queue/queue.constants';
 import type { AnalysisJobData } from '../queue/analysis-job.interface';
-import type { AnalysisType } from '@prisma/client';
-
-interface AnalysisReport {
-  analysisId: string;
-  url: string;
-  analysisType: AnalysisType;
-  website: {
-    finalUrl: string;
-    statusCode: number;
-    redirectChain: string[];
-  };
-  technology: TechnologyResult;
-  seo: SeoResult;
-  security: SecurityResult;
-  performance: PerformanceResult;
-  business: BusinessResult;
-  ux: UxResult;
-  ai: AiResult;
-  screenshots: ScreenshotResult[];
-  metadata: {
-    analysisCompletedAt: string;
-    analysisDurationMs: number;
-  };
-}
 
 const PROGRESS_STAGE = {
   LAUNCHING_BROWSER: 'launching_browser',
@@ -63,12 +38,6 @@ const PROGRESS_STAGE = {
   COMPLETED: 'completed',
   FAILED: 'failed',
 } as const;
-
-interface ScreenshotResult {
-  type: 'desktop' | 'mobile';
-  url: string;
-  blockerDismissed: boolean;
-}
 
 @Processor(ANALYSIS_QUEUE)
 export class AnalysisProcessor extends WorkerHost {
@@ -89,6 +58,7 @@ export class AnalysisProcessor extends WorkerHost {
     private readonly uxAnalyzer: UxAnalyzerService,
     private readonly aiInputBuilder: AiInputBuilderService,
     @Inject(AI_PROVIDER) private readonly aiProvider: AIProvider,
+    private readonly webhookService: WebhookService,
   ) {
     super();
   }
@@ -226,9 +196,20 @@ export class AnalysisProcessor extends WorkerHost {
 
       await this.updateStage(analysisId, PROGRESS_STAGE.SENDING_WEBHOOK);
       if (webhookUrl) {
-        this.logger.log(
-          `Webhook delivery not yet implemented — would notify ${webhookUrl} for analysis ${analysisId}`,
-        );
+        // enqueue and move on — the actual HTTP delivery (and its retries)
+        // happen asynchronously in WebhookProcessor, not on this critical path.
+        await this.webhookService
+          .deliver(analysisId, 'analysis.completed', {
+            event: 'analysis.completed',
+            analysisId,
+            status: 'completed',
+            reportUrl: `/v1/analyses/${analysisId}/report`,
+          })
+          .catch((error: Error) => {
+            this.logger.error(
+              `Failed to enqueue completion webhook for analysis ${analysisId}: ${error.message}`,
+            );
+          });
       } else {
         this.logger.log(
           `No webhookUrl configured for analysis ${analysisId}, skipping webhook`,
@@ -263,6 +244,24 @@ export class AnalysisProcessor extends WorkerHost {
             `Failed to mark analysis ${analysisId} as failed: ${updateError.message}`,
           );
         });
+
+      if (webhookUrl) {
+        await this.webhookService
+          .deliver(analysisId, 'analysis.failed', {
+            event: 'analysis.failed',
+            analysisId,
+            status: 'failed',
+            error: {
+              code: err.code ?? 'UNKNOWN_ERROR',
+              message: err.message,
+            },
+          })
+          .catch((webhookError: Error) => {
+            this.logger.error(
+              `Failed to enqueue failure webhook for analysis ${analysisId}: ${webhookError.message}`,
+            );
+          });
+      }
     } finally {
       if (context) {
         await context.close().catch(() => undefined);

@@ -13,6 +13,14 @@ export const X402_PAYMENT_HEADER = 'payment-signature';
 export const X402_MAX_TIMEOUT_SECONDS = 60;
 
 /**
+ * Algorand Global x402 Challenge leaderboard tag. See the research note in
+ * x402.module.ts for how this was confirmed (extra.tag on the built payment
+ * requirement, not a `tags`/`metadata` field — @x402/core's ResourceConfig
+ * has neither).
+ */
+export const X402_GLOBAL_CHALLENGE_TAG = 'x402-global-challenge';
+
+/**
  * Algorand CAIP-2 network ids, built from the full genesis hash rather than
  * @x402/avm's own shortened `ALGORAND_*_CAIP2` exports. The live GoPlausible
  * facilitator's /supported endpoint currently advertises networks using the

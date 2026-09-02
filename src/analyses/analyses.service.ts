@@ -5,13 +5,20 @@ import { Analysis, AnalysisStatus, AnalysisType } from '@prisma/client';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { UrlValidatorService } from '../common/utils/url-validator.service';
 import { InvalidUrlException } from '../common/exceptions/invalid-url.exception';
+import { CapacityExceededException } from '../common/exceptions/capacity-exceeded.exception';
 import { AppConfigService } from '../config';
 import { generateAnalysisId } from '../common/utils/id';
 import { ANALYSIS_JOB_NAME, ANALYSIS_QUEUE } from '../queue/queue.constants';
 import type { AnalysisJobData } from '../queue/analysis-job.interface';
+import type { AnalysisReport } from '../common/interfaces/analysis-report.interface';
 import { CreateAnalysisDto } from './dto/create-analysis.dto';
 import { CreateAnalysisResponseDto } from './dto/create-analysis-response.dto';
 import { AnalysisStatusResponseDto } from './dto/analysis-status-response.dto';
+import { AnalysisReportPendingResponseDto } from './dto/analysis-report-pending-response.dto';
+
+export type AnalysisReportResult =
+  | { ready: true; report: AnalysisReport }
+  | { ready: false; pending: AnalysisReportPendingResponseDto };
 
 @Injectable()
 export class AnalysesService {
@@ -41,6 +48,15 @@ export class AnalysesService {
         createdAt: cached.createdAt.toISOString(),
         cached: true,
       };
+    }
+
+    // Admission control, independent of the IP-based rate limit — caps how
+    // much work the pipeline has in flight, regardless of who's asking.
+    const runningCount = await this.prisma.analysis.count({
+      where: { status: AnalysisStatus.running },
+    });
+    if (runningCount >= this.appConfigService.maxConcurrentAnalyses) {
+      throw new CapacityExceededException();
     }
 
     const analysisId = generateAnalysisId();
@@ -93,6 +109,35 @@ export class AnalysesService {
         ? analysis.completedAt.toISOString()
         : null,
     };
+  }
+
+  async getAnalysisReport(id: string): Promise<AnalysisReportResult> {
+    const analysis = await this.prisma.analysis.findUnique({
+      where: { id },
+    });
+    if (!analysis) {
+      throw new NotFoundException(`Analysis "${id}" not found`);
+    }
+
+    if (analysis.status !== AnalysisStatus.completed) {
+      return {
+        ready: false,
+        pending: {
+          analysisId: analysis.id,
+          status: analysis.status,
+          message: 'Analysis is not yet complete',
+        },
+      };
+    }
+
+    const report = await this.prisma.analysisReport.findUnique({
+      where: { analysisId: id },
+    });
+    if (!report) {
+      throw new NotFoundException(`Report for analysis "${id}" not found`);
+    }
+
+    return { ready: true, report: report.report as unknown as AnalysisReport };
   }
 
   private findCachedAnalysis(

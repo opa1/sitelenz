@@ -9,8 +9,10 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import type { FastifyReply } from 'fastify';
+import { ThrottlerException } from '@nestjs/throttler';
 import { X402PaymentRequiredException } from '../../x402/exceptions/x402-payment-required.exception';
 import { InvalidUrlException } from '../exceptions/invalid-url.exception';
+import { CapacityExceededException } from '../exceptions/capacity-exceeded.exception';
 
 interface ErrorBody {
   error: { code: string; message: string; details?: unknown };
@@ -35,6 +37,26 @@ export class AllExceptionsFilter implements ExceptionFilter {
       void reply
         .status(HttpStatus.NOT_FOUND)
         .send(this.body('NOT_FOUND', this.messageOf(exception)));
+      return;
+    }
+
+    // Exact required message, not the library's own "ThrottlerException:
+    // Too Many Requests" — checked before the generic HttpException branch.
+    if (exception instanceof ThrottlerException) {
+      void reply
+        .status(HttpStatus.TOO_MANY_REQUESTS)
+        .send(
+          this.body('RATE_LIMITED', 'Too many requests. Please slow down.'),
+        );
+      return;
+    }
+
+    // Same 429 status as ThrottlerException but a distinct code — this is
+    // capacity admission control, not a per-IP request-frequency limit.
+    if (exception instanceof CapacityExceededException) {
+      void reply
+        .status(HttpStatus.TOO_MANY_REQUESTS)
+        .send(this.body('CAPACITY_EXCEEDED', exception.message));
       return;
     }
 
