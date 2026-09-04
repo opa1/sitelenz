@@ -24,6 +24,7 @@ import { CreateAnalysisDto } from './dto/create-analysis.dto';
 import { CreateAnalysisResponseDto } from './dto/create-analysis-response.dto';
 import { AnalysisStatusResponseDto } from './dto/analysis-status-response.dto';
 import { AnalysisReportPendingResponseDto } from './dto/analysis-report-pending-response.dto';
+import { RetryAnalysisResponseDto } from './dto/retry-analysis-response.dto';
 
 // The stricter 'analysis-create' tier only makes sense on POST — skip it
 // here at the class level and re-enable + configure it on just that route
@@ -162,5 +163,57 @@ export class AnalysesController {
     }
     res.status(HttpStatus.ACCEPTED);
     return result.pending;
+  }
+
+  @Post(':id/retry')
+  @SkipThrottle({ 'analysis-create': false })
+  @Throttle({ 'analysis-create': { limit: 10, ttl: 60_000 } })
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Retry a failed analysis',
+    description:
+      'Re-queues a previously failed analysis for the same URL and analysis type. No x402 payment is required — the analysis was already paid for when it was originally created. Only analyses currently in the "failed" state can be retried.',
+  })
+  @ApiParam({ name: 'id', example: 'sl_an_01j8z9k3n8v5w6x7y8z9a0b1c2' })
+  @ApiResponse({
+    status: 200,
+    description: 'Analysis reset and re-queued',
+    type: RetryAnalysisResponseDto,
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'The analysis is not currently in the "failed" state',
+    schema: {
+      example: {
+        error: {
+          code: 'ANALYSIS_NOT_FAILED',
+          message: 'Only failed analyses can be retried',
+        },
+      },
+    },
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'No analysis exists with this id',
+    schema: {
+      example: {
+        error: { code: 'NOT_FOUND', message: 'Analysis "sl_an_xxx" not found' },
+      },
+    },
+  })
+  @ApiResponse({
+    status: 429,
+    description: 'Rate limited (10/min per IP on this endpoint, or 200/min per IP globally)',
+    schema: {
+      example: {
+        error: {
+          code: 'RATE_LIMITED',
+          message: 'Too many requests. Please slow down.',
+        },
+      },
+    },
+  })
+  async retry(@Param('id') id: string): Promise<RetryAnalysisResponseDto> {
+    return this.analysesService.retryAnalysis(id);
   }
 }

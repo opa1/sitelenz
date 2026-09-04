@@ -6,6 +6,7 @@ import { PrismaService } from '../common/prisma/prisma.service';
 import { UrlValidatorService } from '../common/utils/url-validator.service';
 import { InvalidUrlException } from '../common/exceptions/invalid-url.exception';
 import { CapacityExceededException } from '../common/exceptions/capacity-exceeded.exception';
+import { AnalysisNotFailedException } from '../common/exceptions/analysis-not-failed.exception';
 import { AppConfigService } from '../config';
 import { generateAnalysisId } from '../common/utils/id';
 import { ANALYSIS_JOB_NAME, ANALYSIS_QUEUE } from '../queue/queue.constants';
@@ -15,6 +16,7 @@ import { CreateAnalysisDto } from './dto/create-analysis.dto';
 import { CreateAnalysisResponseDto } from './dto/create-analysis-response.dto';
 import { AnalysisStatusResponseDto } from './dto/analysis-status-response.dto';
 import { AnalysisReportPendingResponseDto } from './dto/analysis-report-pending-response.dto';
+import { RetryAnalysisResponseDto } from './dto/retry-analysis-response.dto';
 
 export type AnalysisReportResult =
   | { ready: true; report: AnalysisReport }
@@ -138,6 +140,50 @@ export class AnalysesService {
     }
 
     return { ready: true, report: report.report as unknown as AnalysisReport };
+  }
+
+  async retryAnalysis(id: string): Promise<RetryAnalysisResponseDto> {
+    const analysis = await this.prisma.analysis.findUnique({
+      where: { id },
+    });
+    if (!analysis) {
+      throw new NotFoundException(`Analysis "${id}" not found`);
+    }
+    if (analysis.status !== AnalysisStatus.failed) {
+      throw new AnalysisNotFailedException();
+    }
+
+    const updated = await this.prisma.analysis.update({
+      where: { id },
+      data: {
+        status: AnalysisStatus.queued,
+        progressStage: 'queued',
+        completedAt: null,
+      },
+    });
+
+    // The original job (same jobId) is still sitting in Redis in its failed
+    // state — BullMQ treats add() with an existing jobId as a duplicate and
+    // silently no-ops rather than re-queuing it, so it must be removed
+    // first for the retry to actually run.
+    await this.analysisQueue.remove(id);
+    await this.analysisQueue.add(
+      ANALYSIS_JOB_NAME,
+      {
+        analysisId: updated.id,
+        url: updated.url,
+        analysisType: updated.analysisType,
+        webhookUrl: updated.webhookUrl,
+      },
+      { jobId: id },
+    );
+
+    return {
+      analysisId: updated.id,
+      status: updated.status,
+      analysis: updated.analysisType,
+      retried: true,
+    };
   }
 
   private findCachedAnalysis(

@@ -13,6 +13,7 @@ import { ThrottlerException } from '@nestjs/throttler';
 import { X402PaymentRequiredException } from '../../x402/exceptions/x402-payment-required.exception';
 import { InvalidUrlException } from '../exceptions/invalid-url.exception';
 import { CapacityExceededException } from '../exceptions/capacity-exceeded.exception';
+import { AnalysisNotFailedException } from '../exceptions/analysis-not-failed.exception';
 
 interface ErrorBody {
   error: { code: string; message: string; details?: unknown };
@@ -65,6 +66,14 @@ export class AllExceptionsFilter implements ExceptionFilter {
       void reply
         .status(HttpStatus.BAD_REQUEST)
         .send(this.body('INVALID_URL', exception.message));
+      return;
+    }
+
+    // Also subclasses BadRequestException — check before the generic branch.
+    if (exception instanceof AnalysisNotFailedException) {
+      void reply
+        .status(HttpStatus.BAD_REQUEST)
+        .send(this.body('ANALYSIS_NOT_FAILED', exception.message));
       return;
     }
 
