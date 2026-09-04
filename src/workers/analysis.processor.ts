@@ -39,7 +39,15 @@ const PROGRESS_STAGE = {
   FAILED: 'failed',
 } as const;
 
-@Processor(ANALYSIS_QUEUE)
+@Processor(ANALYSIS_QUEUE, {
+  // A full analysis (crawl + Lighthouse + screenshots + AI) can run well
+  // past BullMQ's 30s default lock duration, causing another worker to
+  // treat the job as stalled and pick it up again mid-run. 5 minutes covers
+  // a full run; renewing every 60s instead of the ~15s default cuts
+  // Upstash round-trips.
+  lockDuration: 300_000,
+  lockRenewTime: 60_000,
+})
 export class AnalysisProcessor extends WorkerHost {
   private readonly logger = new Logger(AnalysisProcessor.name);
 

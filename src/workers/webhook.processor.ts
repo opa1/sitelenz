@@ -21,7 +21,10 @@ interface DeliveryAttemptResult {
   responseStatus: number | null;
 }
 
-@Processor(WEBHOOK_QUEUE)
+@Processor(WEBHOOK_QUEUE, {
+  lockDuration: 300_000,
+  lockRenewTime: 60_000,
+})
 export class WebhookProcessor extends WorkerHost {
   private readonly logger = new Logger(WebhookProcessor.name);
 
