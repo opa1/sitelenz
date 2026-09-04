@@ -40,8 +40,21 @@ export class BrowserService implements OnModuleInit, OnModuleDestroy {
     return this.currentDebugPort;
   }
 
-  async onModuleInit(): Promise<void> {
-    await this.getBrowser();
+  onModuleInit(): void {
+    // Fire-and-forget, not awaited: Nest resolves every onModuleInit hook
+    // before main.ts's app.listen() runs, so awaiting a Chromium launch here
+    // blocks the HTTP server from binding to any port until it finishes. On
+    // Render's Docker deploy that meant the port-scan timeout gave up with
+    // "no open ports detected" before Chromium ever came up. Launching in
+    // the background still warms the browser for the first request; if this
+    // hasn't resolved yet (or failed) by then, acquireContext()/
+    // acquireMobileContext() fall back to getBrowser()'s own lazy launch.
+    this.getBrowser().catch((error: Error) => {
+      this.logger.error(
+        `Startup Chromium launch failed: ${error.message}`,
+        error.stack,
+      );
+    });
   }
 
   async onModuleDestroy(): Promise<void> {
