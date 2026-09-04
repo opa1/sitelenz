@@ -6,6 +6,7 @@ import {
   NestFastifyApplication,
 } from '@nestjs/platform-fastify';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import fastifyCors from '@fastify/cors';
 import { AppModule } from './app.module';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 
@@ -61,6 +62,17 @@ async function bootstrap() {
     .build();
   const document = SwaggerModule.createDocument(app, swaggerConfig);
   SwaggerModule.setup('docs', app, document);
+
+  // NestJS's enableCors() doesn't correctly wire up preflight OPTIONS routes
+  // under the Fastify adapter — register the Fastify plugin directly instead.
+  await app.register(fastifyCors, {
+    origin: '*',
+    methods: ['GET', 'POST', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'X-PAYMENT', 'X-Payment', 'Authorization'],
+    exposedHeaders: ['X-PAYMENT'],
+    preflight: true,
+    optionsSuccessStatus: 200,
+  });
 
   const port = process.env.PORT ?? 3000;
   await app.listen(port, '0.0.0.0');
