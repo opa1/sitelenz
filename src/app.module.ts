@@ -1,10 +1,12 @@
 import { Module } from '@nestjs/common';
+import type { MiddlewareConsumer, NestModule } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { ConfigModule } from './config';
 import { CommonModule } from './common/common.module';
 import { PrismaModule } from './common/prisma/prisma.module';
 import { BrowserModule } from './common/browser/browser.module';
+import { HttpLoggerMiddleware } from './common/middleware/http-logger.middleware';
 import { QueueModule } from './queue/queue.module';
 import { HealthModule } from './health/health.module';
 import { AnalysesModule } from './analyses/analyses.module';
@@ -42,4 +44,8 @@ import { WebhooksModule } from './webhooks/webhooks.module';
   ],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+  configure(consumer: MiddlewareConsumer): void {
+    consumer.apply(HttpLoggerMiddleware).forRoutes('*');
+  }
+}

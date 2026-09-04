@@ -68,7 +68,13 @@ async function bootstrap() {
   await app.register(fastifyCors, {
     origin: '*',
     methods: ['GET', 'POST', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'X-PAYMENT', 'X-Payment', 'Authorization'],
+    allowedHeaders: [
+      'Content-Type',
+      'X-PAYMENT',
+      'X-Payment',
+      'PAYMENT-SIGNATURE',
+      'Authorization',
+    ],
     exposedHeaders: ['X-PAYMENT'],
     preflight: true,
     optionsSuccessStatus: 200,
