@@ -1,4 +1,4 @@
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { AnalysisStatus, AnalysisType } from '@prisma/client';
 
 export class AnalysisStatusResponseDto {
@@ -23,4 +23,10 @@ export class AnalysisStatusResponseDto {
     type: String,
   })
   completedAt: string | null;
+
+  @ApiPropertyOptional({
+    description: 'Present only when status is "failed" — the error that ended the pipeline',
+    example: 'page.screenshot: Timeout 120000ms exceeded.',
+  })
+  errorMessage?: string;
 }

@@ -8,7 +8,9 @@ import type {
 import type { Analyzer, AnalyzerOptions } from '../analyzer.interface';
 import { getHeader } from '../../common/utils/headers.util';
 import { getBaseDomain } from '../../common/utils/url.util';
-import { safe } from '../../common/utils/analyzer-safety.util';
+import { createSafe } from '../../common/utils/analyzer-safety.util';
+
+const safe = createSafe('performance');
 import {
   getLighthouseAudit,
   getLighthouseCategoryScore,

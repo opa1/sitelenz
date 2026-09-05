@@ -3,7 +3,9 @@ import type { RawObservations } from '../../common/browser/raw-observations.inte
 import type { Analyzer, AnalyzerOptions } from '../analyzer.interface';
 import { loadHtml, type CheerioAPI } from '../../common/utils/html.util';
 import { getHeader } from '../../common/utils/headers.util';
-import { safe } from '../../common/utils/analyzer-safety.util';
+import { createSafe } from '../../common/utils/analyzer-safety.util';
+
+const safe = createSafe('technology');
 import type {
   AdditionalLibrary,
   DetectedTechnology,

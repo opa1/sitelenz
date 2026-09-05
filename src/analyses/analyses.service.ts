@@ -110,6 +110,9 @@ export class AnalysesService {
       completedAt: analysis.completedAt
         ? analysis.completedAt.toISOString()
         : null,
+      ...(analysis.status === AnalysisStatus.failed && analysis.errorMessage
+        ? { errorMessage: analysis.errorMessage }
+        : {}),
     };
   }
 
@@ -159,6 +162,7 @@ export class AnalysesService {
         status: AnalysisStatus.queued,
         progressStage: 'queued',
         completedAt: null,
+        errorMessage: null,
       },
     });
 

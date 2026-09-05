@@ -39,6 +39,7 @@ model Analysis {
   analysisType   AnalysisType   @default(standard)
   status         AnalysisStatus @default(queued)
   progressStage  String         @default("pending")
+  errorMessage   String?
   webhookUrl     String?
   createdAt      DateTime       @default(now())
   updatedAt      DateTime       @updatedAt

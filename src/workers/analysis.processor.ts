@@ -76,6 +76,15 @@ export class AnalysisProcessor extends WorkerHost {
     const deep = analysisType === 'deep';
     const startedAt = Date.now();
 
+    // Tracked locally (not just persisted via updateStage) so the catch
+    // block below can log exactly which stage was active when the pipeline
+    // died, without an extra DB round-trip to re-read it.
+    let currentProgressStage: string = PROGRESS_STAGE.LAUNCHING_BROWSER;
+    const setStage = async (stage: string): Promise<void> => {
+      currentProgressStage = stage;
+      await this.updateStage(analysisId, stage);
+    };
+
     let context: BrowserContext | null = null;
     let mobileContext: BrowserContext | null = null;
 
@@ -87,18 +96,18 @@ export class AnalysisProcessor extends WorkerHost {
       );
       context = await this.browserService.acquireContext();
 
-      await this.updateStage(analysisId, PROGRESS_STAGE.FETCHING_WEBSITE);
+      await setStage(PROGRESS_STAGE.FETCHING_WEBSITE);
       const observations = await this.observationCollector.collect(
         context,
         url,
       );
 
-      await this.updateStage(analysisId, PROGRESS_STAGE.RENDERING);
+      await setStage(PROGRESS_STAGE.RENDERING);
       observations.lighthouseResult = await this.lighthouseService.run(
         observations.url,
       );
 
-      await this.updateStage(analysisId, PROGRESS_STAGE.TAKING_SCREENSHOT);
+      await setStage(PROGRESS_STAGE.TAKING_SCREENSHOT);
       const screenshots: ScreenshotResult[] = [];
       screenshots.push(
         await this.captureScreenshot(
@@ -120,7 +129,7 @@ export class AnalysisProcessor extends WorkerHost {
         );
       }
 
-      await this.updateStage(analysisId, PROGRESS_STAGE.ANALYZING);
+      await setStage(PROGRESS_STAGE.ANALYZING);
       const analyzerOptions = { deep };
       // Run in sequence, not in parallel — a later analyzer may eventually
       // want an earlier one's output as context.
@@ -149,7 +158,7 @@ export class AnalysisProcessor extends WorkerHost {
         analyzerOptions,
       );
 
-      await this.updateStage(analysisId, PROGRESS_STAGE.AI_ANALYSIS);
+      await setStage(PROGRESS_STAGE.AI_ANALYSIS);
       let aiResult: AiResult;
       try {
         const condensedInput = this.aiInputBuilder.build(
@@ -172,7 +181,7 @@ export class AnalysisProcessor extends WorkerHost {
         aiResult = this.buildFallbackAiResult();
       }
 
-      await this.updateStage(analysisId, PROGRESS_STAGE.STORING_RESULTS);
+      await setStage(PROGRESS_STAGE.STORING_RESULTS);
       const report: AnalysisReport = {
         analysisId,
         url,
@@ -202,7 +211,7 @@ export class AnalysisProcessor extends WorkerHost {
         update: { report: reportJson },
       });
 
-      await this.updateStage(analysisId, PROGRESS_STAGE.SENDING_WEBHOOK);
+      await setStage(PROGRESS_STAGE.SENDING_WEBHOOK);
       if (webhookUrl) {
         // enqueue and move on — the actual HTTP delivery (and its retries)
         // happen asynchronously in WebhookProcessor, not on this critical path.
@@ -230,21 +239,36 @@ export class AnalysisProcessor extends WorkerHost {
           status: AnalysisStatus.completed,
           progressStage: PROGRESS_STAGE.COMPLETED,
           completedAt: new Date(),
+          // Clears any errorMessage left over from a prior failed attempt
+          // of this same analysisId (a successful retry).
+          errorMessage: null,
         },
       });
       this.logger.log(`Completed analysis ${analysisId}`);
     } catch (error) {
       const err = error as Error & { code?: string };
-      this.logger.error(
-        `Analysis ${analysisId} failed [${err.code ?? 'UNKNOWN_ERROR'}]: ${err.message}`,
-        err.stack,
-      );
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+
+      this.logger.error('Analysis pipeline failed', {
+        analysisId,
+        url,
+        analysisType,
+        stage: currentProgressStage,
+        error: errorMessage,
+        stack: error instanceof Error ? error.stack : undefined,
+      });
+
+      // progressStage is deliberately left untouched here — it already
+      // holds whatever stage setStage() last wrote, which is exactly where
+      // the pipeline died. Overwriting it with a generic "failed" marker
+      // would destroy that information.
       await this.prisma.analysis
         .update({
           where: { id: analysisId },
           data: {
             status: AnalysisStatus.failed,
-            progressStage: PROGRESS_STAGE.FAILED,
+            errorMessage,
           },
         })
         .catch((updateError: Error) => {
@@ -261,7 +285,7 @@ export class AnalysisProcessor extends WorkerHost {
             status: 'failed',
             error: {
               code: err.code ?? 'UNKNOWN_ERROR',
-              message: err.message,
+              message: errorMessage,
             },
           })
           .catch((webhookError: Error) => {

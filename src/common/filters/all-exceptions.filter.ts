@@ -8,7 +8,7 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
-import type { FastifyReply } from 'fastify';
+import type { FastifyReply, FastifyRequest } from 'fastify';
 import { ThrottlerException } from '@nestjs/throttler';
 import { X402PaymentRequiredException } from '../../x402/exceptions/x402-payment-required.exception';
 import { InvalidUrlException } from '../exceptions/invalid-url.exception';
@@ -25,6 +25,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
 
   catch(exception: unknown, host: ArgumentsHost): void {
     const reply = host.switchToHttp().getResponse<FastifyReply>();
+    const request = host.switchToHttp().getRequest<FastifyRequest>();
 
     // x402 PaymentRequired carries its own protocol shape — never wrap it.
     if (exception instanceof X402PaymentRequiredException) {
@@ -107,16 +108,32 @@ export class AllExceptionsFilter implements ExceptionFilter {
 
     if (exception instanceof HttpException) {
       const status = exception.getStatus();
+      if (status === HttpStatus.INTERNAL_SERVER_ERROR) {
+        this.logUnhandled(exception, request);
+      }
       void reply
         .status(status)
         .send(this.body(this.codeForStatus(status), this.messageOf(exception)));
       return;
     }
 
-    this.logger.error(exception instanceof Error ? exception.stack : exception);
+    this.logUnhandled(exception, request);
     void reply
       .status(HttpStatus.INTERNAL_SERVER_ERROR)
       .send(this.body('INTERNAL_ERROR', 'An unexpected error occurred'));
+  }
+
+  // Every exception that reaches the client as a 500 goes through here —
+  // this is why 500s used to show no detail in the logs at all: a thrown
+  // InternalServerErrorException took the generic HttpException branch
+  // above, which never logged anything.
+  private logUnhandled(exception: unknown, request: FastifyRequest): void {
+    this.logger.error('Unhandled exception', {
+      path: request.url,
+      method: request.method,
+      error: exception instanceof Error ? exception.message : String(exception),
+      stack: exception instanceof Error ? exception.stack : undefined,
+    });
   }
 
   private body(code: string, message: string, details?: unknown): ErrorBody {
