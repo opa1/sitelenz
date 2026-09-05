@@ -45,6 +45,19 @@ export class AppConfigService {
     return this.configService.get('redis', { infer: true }).url;
   }
 
+  /**
+   * BullMQ's `prefix` option is a path segment BullMQ itself joins with
+   * `:` (producing `"<prefix>:<queue>:..."`) — a trailing colon in the env
+   * var (e.g. "sitelenz:") would double up, so it's stripped here rather
+   * than requiring the operator to get the format exactly right.
+   */
+  get redisKeyPrefix(): string | undefined {
+    const prefix = this.configService
+      .get('redis', { infer: true })
+      .keyPrefix.replace(/:+$/, '');
+    return prefix.length > 0 ? prefix : undefined;
+  }
+
   get cloudinaryCloudName(): string {
     return this.configService.get('cloudinary', { infer: true }).cloudName;
   }

@@ -1,0 +1,132 @@
+name: Deploy to production
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
+
+env:
+  IMAGE_OWNER: opa1
+  REPO_NAME: sitelenz
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Typecheck
+        run: npx tsc --noEmit
+
+      - name: Test
+        # No *.spec.ts files exist in this repo yet. Jest's default behavior
+        # is to exit non-zero when it finds zero matching test files, which
+        # would fail this step on every single run regardless of the app's
+        # correctness — --passWithNoTests keeps this step meaningful (it
+        # still runs and fails real test failures) without being a red
+        # pipeline over an empty test suite. Remove it once real tests land.
+        run: npm test -- --passWithNoTests
+
+  build-and-push:
+    needs: verify
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      image_tag: ${{ steps.tag.outputs.image_tag }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compute image tag
+        id: tag
+        run: echo "image_tag=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-qemu-action@v3
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ghcr.io/${{ env.IMAGE_OWNER }}/${{ env.REPO_NAME }}-api:${{ steps.tag.outputs.image_tag }}
+
+      - name: Verify multi-platform manifest
+        run: |
+          set -euo pipefail
+          IMAGE="ghcr.io/${{ env.IMAGE_OWNER }}/${{ env.REPO_NAME }}-api:${{ steps.tag.outputs.image_tag }}"
+          raw="$(docker buildx imagetools inspect "$IMAGE" --raw)"
+          echo "$raw" | jq '[.manifests[].platform | (.os + "/" + .architecture)]'
+          has_amd64=$(echo "$raw" | jq '[.manifests[].platform | (.os + "/" + .architecture)] | any(. == "linux/amd64")')
+          has_arm64=$(echo "$raw" | jq '[.manifests[].platform | (.os + "/" + .architecture)] | any(. == "linux/arm64")')
+          if [ "$has_amd64" != "true" ] || [ "$has_arm64" != "true" ]; then
+            echo "::error::Pushed manifest is missing linux/amd64 and/or linux/arm64 (amd64=${has_amd64}, arm64=${has_arm64})"
+            exit 1
+          fi
+          echo "Manifest confirmed for linux/amd64 and linux/arm64"
+
+  deploy:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Only compose.yml and scripts/ are synced — .env is server state and
+      # must never be overwritten by a deploy.
+      - name: Sync deploy files to server
+        uses: appleboy/scp-action@v1
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_KEY }}
+          source: "deploy/compose.yml,deploy/scripts/*"
+          target: "/opt/apps/sitelenz/"
+          strip_components: 1
+
+      - name: Run deploy.sh over SSH
+        uses: appleboy/ssh-action@v1
+        env:
+          DEPLOY_IMAGE_OWNER: ${{ env.IMAGE_OWNER }}
+          DEPLOY_REPO_NAME: ${{ env.REPO_NAME }}
+          DEPLOY_IMAGE_TAG: ${{ needs.build-and-push.outputs.image_tag }}
+          DEPLOY_GHCR_USER: ${{ secrets.GHCR_USER }}
+          DEPLOY_GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_KEY }}
+          envs: DEPLOY_IMAGE_OWNER,DEPLOY_REPO_NAME,DEPLOY_IMAGE_TAG,DEPLOY_GHCR_USER,DEPLOY_GHCR_TOKEN
+          script: |
+            set -euo pipefail
+            export IMAGE_OWNER="$DEPLOY_IMAGE_OWNER"
+            export REPO_NAME="$DEPLOY_REPO_NAME"
+            export IMAGE_TAG="$DEPLOY_IMAGE_TAG"
+            export GHCR_USER="$DEPLOY_GHCR_USER"
+            export GHCR_TOKEN="$DEPLOY_GHCR_TOKEN"
+            bash /opt/apps/sitelenz/scripts/deploy.sh

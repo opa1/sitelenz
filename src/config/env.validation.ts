@@ -29,6 +29,10 @@ export const envValidationSchema = Joi.object({
 
   DATABASE_URL: Joi.string().required(),
   REDIS_URL: Joi.string().required(),
+  // Namespaces every BullMQ key this app writes — required when Redis is a
+  // shared instance across multiple apps (see queue.module.ts), optional
+  // for a dedicated Redis where BullMQ's own default prefix is fine.
+  REDIS_KEY_PREFIX: Joi.string().allow('').default(''),
 
   CLOUDINARY_CLOUD_NAME: Joi.string().required(),
   CLOUDINARY_API_KEY: Joi.string().required(),

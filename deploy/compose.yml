@@ -1,0 +1,15 @@
+services:
+  sitelenz-api:
+    image: ghcr.io/${IMAGE_OWNER}/${REPO_NAME}-api:${IMAGE_TAG}
+    container_name: sitelenz-api
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3002:3002"
+    env_file:
+      - .env
+    networks:
+      - alpha
+
+networks:
+  alpha:
+    external: true

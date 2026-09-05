@@ -11,6 +11,10 @@ import { ANALYSIS_QUEUE, WEBHOOK_QUEUE } from './queue.constants';
         connection: new IORedis(appConfigService.redisUrl, {
           maxRetriesPerRequest: null,
         }),
+        // Namespaces every key this app's queues write — required on a
+        // Redis instance shared with other apps; omitted (falls back to
+        // BullMQ's own default "bull" prefix) when unset.
+        prefix: appConfigService.redisKeyPrefix,
       }),
       inject: [AppConfigService],
     }),

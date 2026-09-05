@@ -44,6 +44,7 @@ export interface AppConfiguration {
   };
   redis: {
     url: string;
+    keyPrefix: string;
   };
   cloudinary: {
     cloudName: string;
@@ -90,6 +91,7 @@ export default (): AppConfiguration => ({
   },
   redis: {
     url: process.env.REDIS_URL ?? '',
+    keyPrefix: process.env.REDIS_KEY_PREFIX ?? '',
   },
   cloudinary: {
     cloudName: process.env.CLOUDINARY_CLOUD_NAME ?? '',
