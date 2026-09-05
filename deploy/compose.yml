@@ -3,6 +3,7 @@ services:
     image: ghcr.io/${IMAGE_OWNER}/${REPO_NAME}-api:${IMAGE_TAG}
     container_name: sitelenz-api
     restart: unless-stopped
+    shm_size: '256mb'
     ports:
       - "127.0.0.1:3002:3002"
     env_file:
