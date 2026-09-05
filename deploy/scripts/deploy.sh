@@ -28,21 +28,36 @@ fi
 
 export IMAGE_OWNER REPO_NAME IMAGE_TAG
 
-IMAGE="ghcr.io/${IMAGE_OWNER}/${REPO_NAME}-api:${IMAGE_TAG}"
+API_IMAGE="ghcr.io/${IMAGE_OWNER}/${REPO_NAME}-api:${IMAGE_TAG}"
+MIGRATOR_IMAGE="ghcr.io/${IMAGE_OWNER}/${REPO_NAME}-migrator:${IMAGE_TAG}"
+ENV_FILE="/opt/apps/sitelenz/.env"
 
 echo "==> Logging in to ghcr.io as ${GHCR_USER}"
 echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
 
-echo "==> Pulling ${IMAGE}"
-if ! docker pull "$IMAGE"; then
-  echo "!! Failed to pull ${IMAGE} — logging out and aborting before touching the running container" >&2
+echo "==> Pulling ${API_IMAGE}"
+if ! docker pull "$API_IMAGE"; then
+  echo "!! Failed to pull ${API_IMAGE} — logging out and aborting before touching the running container" >&2
+  docker logout ghcr.io
+  exit 1
+fi
+
+echo "==> Pulling ${MIGRATOR_IMAGE}"
+if ! docker pull "$MIGRATOR_IMAGE"; then
+  echo "!! Failed to pull ${MIGRATOR_IMAGE} — logging out and aborting before touching the running container" >&2
   docker logout ghcr.io
   exit 1
 fi
 
 docker logout ghcr.io
 
-echo "==> Pull succeeded — recreating sitelenz-api"
+echo "==> Both images pulled — running migrations against the shared postgres before touching sitelenz-api"
+if ! docker run --rm --network alpha --env-file "$ENV_FILE" "$MIGRATOR_IMAGE"; then
+  echo "!! Migration failed — aborting deploy, sitelenz-api left untouched" >&2
+  exit 1
+fi
+
+echo "==> Migrations applied — recreating sitelenz-api"
 if docker inspect sitelenz-api >/dev/null 2>&1; then
   docker rm -f sitelenz-api
 fi
@@ -66,4 +81,4 @@ if [ "$healthy" != true ]; then
   exit 1
 fi
 
-echo "==> Deploy complete: ${IMAGE}"
+echo "==> Deploy complete: ${API_IMAGE}"

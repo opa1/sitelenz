@@ -68,28 +68,46 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and push
+      - name: Build and push api
         uses: docker/build-push-action@v6
         with:
           context: .
           file: ./Dockerfile
+          target: production
           platforms: linux/amd64,linux/arm64
           push: true
           tags: ghcr.io/${{ env.IMAGE_OWNER }}/${{ env.REPO_NAME }}-api:${{ steps.tag.outputs.image_tag }}
 
-      - name: Verify multi-platform manifest
+      - name: Build and push migrator
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          target: migrator
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ghcr.io/${{ env.IMAGE_OWNER }}/${{ env.REPO_NAME }}-migrator:${{ steps.tag.outputs.image_tag }}
+
+      - name: Verify multi-platform manifests
         run: |
           set -euo pipefail
-          IMAGE="ghcr.io/${{ env.IMAGE_OWNER }}/${{ env.REPO_NAME }}-api:${{ steps.tag.outputs.image_tag }}"
-          raw="$(docker buildx imagetools inspect "$IMAGE" --raw)"
-          echo "$raw" | jq '[.manifests[].platform | (.os + "/" + .architecture)]'
-          has_amd64=$(echo "$raw" | jq '[.manifests[].platform | (.os + "/" + .architecture)] | any(. == "linux/amd64")')
-          has_arm64=$(echo "$raw" | jq '[.manifests[].platform | (.os + "/" + .architecture)] | any(. == "linux/arm64")')
-          if [ "$has_amd64" != "true" ] || [ "$has_arm64" != "true" ]; then
-            echo "::error::Pushed manifest is missing linux/amd64 and/or linux/arm64 (amd64=${has_amd64}, arm64=${has_arm64})"
-            exit 1
-          fi
-          echo "Manifest confirmed for linux/amd64 and linux/arm64"
+          check() {
+            local image="$1"
+            local raw
+            raw="$(docker buildx imagetools inspect "$image" --raw)"
+            echo "$image:"
+            echo "$raw" | jq '[.manifests[].platform | (.os + "/" + .architecture)]'
+            local has_amd64 has_arm64
+            has_amd64=$(echo "$raw" | jq '[.manifests[].platform | (.os + "/" + .architecture)] | any(. == "linux/amd64")')
+            has_arm64=$(echo "$raw" | jq '[.manifests[].platform | (.os + "/" + .architecture)] | any(. == "linux/arm64")')
+            if [ "$has_amd64" != "true" ] || [ "$has_arm64" != "true" ]; then
+              echo "::error::${image} manifest is missing linux/amd64 and/or linux/arm64 (amd64=${has_amd64}, arm64=${has_arm64})"
+              return 1
+            fi
+          }
+          check "ghcr.io/${{ env.IMAGE_OWNER }}/${{ env.REPO_NAME }}-api:${{ steps.tag.outputs.image_tag }}"
+          check "ghcr.io/${{ env.IMAGE_OWNER }}/${{ env.REPO_NAME }}-migrator:${{ steps.tag.outputs.image_tag }}"
+          echo "Both manifests confirmed for linux/amd64 and linux/arm64"
 
   deploy:
     needs: build-and-push

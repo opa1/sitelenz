@@ -27,6 +27,28 @@ COPY . .
 RUN npm run build
 
 # =============================================================================
+# Migrator — runs `prisma migrate deploy` against the shared postgres before
+# a new sitelenz-api container is allowed to serve traffic (see
+# deploy/scripts/deploy.sh). Built straight from the builder stage rather
+# than a fresh minimal install: `prisma` (the CLI) is a devDependency, so
+# the production stage below deliberately excludes it — but the migrator's
+# entire purpose IS the CLI, and the builder stage already has it correctly
+# resolved via a full `npm ci`, plus prisma/ and prisma7.config.ts (copied
+# in via `COPY . .` above, since that file lives at the repo root, not
+# inside prisma/). Reassembling that dependency set by hand in a separate
+# minimal stage is exactly how a migrator image quietly ships without
+# `dotenv` (which prisma7.config.ts imports) and fails on first deploy.
+# =============================================================================
+FROM builder AS migrator
+
+# Prisma 7 auto-discovers prisma7.config.ts specifically (checked before the
+# legacy prisma.config.ts — Prisma versions its own config filename), whose
+# `datasource.url` reads `process.env["DATABASE_URL"]`. That's why nothing
+# is baked in here: DATABASE_URL must come from the container's environment
+# at `docker run` time (`--env-file /opt/apps/sitelenz/.env`), not the image.
+ENTRYPOINT ["npx", "prisma", "migrate", "deploy"]
+
+# =============================================================================
 # Production — lean runtime image.
 # =============================================================================
 FROM node:24-bookworm-slim AS production

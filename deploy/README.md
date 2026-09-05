@@ -66,8 +66,11 @@ Run once, on the server, before the first CI deploy.
 Handled entirely by `.github/workflows/deploy-production.yml` on every push to `main` (or a manual `workflow_dispatch` run):
 
 1. **verify** — `npm ci`, build, typecheck, test
-2. **build-and-push** — multi-platform (`linux/amd64` + `linux/arm64`) image build, pushed to `ghcr.io/opa1/sitelenz-api:<short-sha>`, then confirms both platforms actually landed in the pushed manifest
-3. **deploy** — syncs `deploy/compose.yml` and `deploy/scripts/` to `/opt/apps/sitelenz/` (never `.env`), then runs `scripts/deploy.sh` over SSH, which logs in to GHCR, pulls the new image, recreates the `sitelenz-api` container, and polls `http://localhost:3002/health` until it responds (or fails the deploy)
+2. **build-and-push** — multi-platform (`linux/amd64` + `linux/arm64`) build of both the `production` and `migrator` Dockerfile targets, pushed to `ghcr.io/opa1/sitelenz-api:<short-sha>` and `ghcr.io/opa1/sitelenz-migrator:<short-sha>`, then confirms both platforms actually landed in both pushed manifests
+3. **deploy** — syncs `deploy/compose.yml` and `deploy/scripts/` to `/opt/apps/sitelenz/` (never `.env`), then runs `scripts/deploy.sh` over SSH, which:
+   1. logs in to GHCR and pulls both images
+   2. runs `docker run --rm --network alpha --env-file .env <migrator image>` — a one-shot container that runs `prisma migrate deploy` against the shared `postgres` container and exits. If this fails, the deploy stops here: `sitelenz-api` is never touched, so a bad migration can't take down a working API.
+   3. only then recreates the `sitelenz-api` container and polls `http://localhost:3002/health` until it responds (or fails the deploy)
 
 ### GitHub secrets required
 
