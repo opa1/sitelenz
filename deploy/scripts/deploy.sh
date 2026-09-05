@@ -81,4 +81,21 @@ if [ "$healthy" != true ]; then
   exit 1
 fi
 
+# Only reached after a passing health check — image.env is what
+# sitelenz.service reads on boot, so it must never be updated to a tag that
+# hasn't actually been proven healthy. A failed health check above already
+# exited before this point, leaving whatever tag was last known-good in
+# place for reboot safety. Written to a temp file in the same directory
+# (so the final `mv` is a same-filesystem rename, not a copy) and moved
+# into place, so a crash mid-write can't leave a corrupt/partial image.env.
+echo "==> Health check passed — updating image.env for reboot safety"
+image_env_tmp="$(mktemp image.env.XXXXXX)"
+cat > "$image_env_tmp" <<EOF
+IMAGE_OWNER=${IMAGE_OWNER}
+REPO_NAME=${REPO_NAME}
+IMAGE_TAG=${IMAGE_TAG}
+EOF
+chmod 600 "$image_env_tmp"
+mv -f "$image_env_tmp" image.env
+
 echo "==> Deploy complete: ${API_IMAGE}"
