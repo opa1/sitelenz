@@ -16,9 +16,10 @@ interface MiddlewareRequest extends IncomingMessage {
 }
 
 @Injectable()
-export class HttpLoggerMiddleware
-  implements NestMiddleware<MiddlewareRequest, ServerResponse>
-{
+export class HttpLoggerMiddleware implements NestMiddleware<
+  MiddlewareRequest,
+  ServerResponse
+> {
   private readonly logger = new Logger('HTTP');
 
   use(

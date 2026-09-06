@@ -4,9 +4,11 @@ import {
   Get,
   HttpCode,
   HttpStatus,
+  NotFoundException,
   Param,
   Post,
   Res,
+  UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
 import {
@@ -18,6 +20,7 @@ import {
 } from '@nestjs/swagger';
 import type { FastifyReply } from 'fastify';
 import { SkipThrottle, Throttle } from '@nestjs/throttler';
+import { X402Guard } from '../x402/x402.guard';
 import { UrlValidationInterceptor } from './interceptors/url-validation.interceptor';
 import { AnalysesService } from './analyses.service';
 import { CreateAnalysisDto } from './dto/create-analysis.dto';
@@ -104,6 +107,18 @@ export class AnalysesController {
     @Body() dto: CreateAnalysisDto,
   ): Promise<CreateAnalysisResponseDto> {
     return this.analysesService.createAnalysis(dto);
+  }
+
+  // x402 Bazaar discovery: the x402 Doctor probes resources with a plain GET
+  // to catalog them. The real endpoint is POST-only, so without this route
+  // the doctor gets a 404 and can never see our 402 challenge. X402Guard
+  // runs as a normal @UseGuards() here (no URL-validation ordering trick
+  // needed — this route never queues anything), fires before the handler,
+  // and returns 402 on every unpaid request. The handler itself is dead code.
+  @Get()
+  @UseGuards(X402Guard)
+  discover(): never {
+    throw new NotFoundException();
   }
 
   @Get(':id')
@@ -203,7 +218,8 @@ export class AnalysesController {
   })
   @ApiResponse({
     status: 429,
-    description: 'Rate limited (10/min per IP on this endpoint, or 200/min per IP globally)',
+    description:
+      'Rate limited (10/min per IP on this endpoint, or 200/min per IP globally)',
     schema: {
       example: {
         error: {

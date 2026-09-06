@@ -25,7 +25,8 @@ export class AnalysisStatusResponseDto {
   completedAt: string | null;
 
   @ApiPropertyOptional({
-    description: 'Present only when status is "failed" — the error that ended the pipeline',
+    description:
+      'Present only when status is "failed" — the error that ended the pipeline',
     example: 'page.screenshot: Timeout 120000ms exceeded.',
   })
   errorMessage?: string;

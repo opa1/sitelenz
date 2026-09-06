@@ -107,7 +107,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
     }
 
     if (exception instanceof HttpException) {
-      const status = exception.getStatus();
+      const status: HttpStatus = exception.getStatus();
       if (status === HttpStatus.INTERNAL_SERVER_ERROR) {
         this.logUnhandled(exception, request);
       }

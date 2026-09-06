@@ -6,7 +6,10 @@ import type {
 import type { Analyzer, AnalyzerOptions } from '../analyzer.interface';
 import { loadHtml, type CheerioAPI } from '../../common/utils/html.util';
 import { getHeader } from '../../common/utils/headers.util';
-import { createSafe, withTimeout } from '../../common/utils/analyzer-safety.util';
+import {
+  createSafe,
+  withTimeout,
+} from '../../common/utils/analyzer-safety.util';
 
 const safe = createSafe('seo');
 import { getLighthouseCategoryScore } from '../../common/utils/lighthouse.util';

@@ -34,7 +34,16 @@ export class X402Guard implements CanActivate {
 
     const body = request.body as Record<string, unknown> | undefined;
     const analysisType = body?.['analysis'];
-    const priceUsd = this.resolvePrice(analysisType);
+    // Discovery probes (x402 Bazaar's doctor) hit this route with a plain,
+    // bodyless GET just to see the 402 challenge — there's no "analysis"
+    // field to resolve a price from, so resolvePrice's strict validation
+    // (correct for POST's real body) doesn't apply here. Any real payment
+    // still fails matching below since resourceConfig.price won't match
+    // what the caller signed for a non-existent GET-priced resource.
+    const priceUsd =
+      request.method === 'GET'
+        ? this.appConfigService.priceStandardUsd
+        : this.resolvePrice(analysisType);
 
     const network =
       this.appConfigService.network === 'mainnet'
@@ -69,7 +78,10 @@ export class X402Guard implements CanActivate {
       // `request.host` (not `.hostname`) — hostname alone drops the port,
       // which broke locally on any non-default port.
       url: `${request.protocol}://${request.host}${request.url}`,
-      description: `SiteLenz ${String(analysisType)} analysis`,
+      description:
+        request.method === 'GET'
+          ? 'SiteLenz website analysis'
+          : `SiteLenz ${String(analysisType)} analysis`,
       mimeType: 'application/json',
     };
 
