@@ -127,41 +127,52 @@ export class X402Guard implements CanActivate {
             },
           },
         },
+        // A single JSON Schema document with one root-level `$schema`, not
+        // separate `input`/`output` sub-documents each with their own -
+        // the catalog validator checks `bazaar.schema.$schema` specifically
+        // and silently drops the resource from /discovery/resources if it's
+        // missing there (confirmed via a live x402 Doctor report against
+        // api.sitelenz.online: "Present but REJECTED by the catalog
+        // validator... bazaar.schema.$schema must be draft 2020-12").
         schema: {
-          input: {
-            $schema: 'https://json-schema.org/draft/2020-12/schema',
-            type: 'object',
-            required: ['url', 'analysis'],
-            properties: {
-              url: {
-                type: 'string',
-                format: 'uri',
-                description: 'The website URL to analyze',
-              },
-              analysis: {
-                type: 'string',
-                enum: ['standard', 'deep'],
-                description: 'Analysis depth - determines the price charged',
-              },
-              webhookUrl: {
-                type: 'string',
-                format: 'uri',
-                description: 'HTTPS URL to notify when the analysis completes',
+          $schema: 'https://json-schema.org/draft/2020-12/schema',
+          type: 'object',
+          required: ['input'],
+          properties: {
+            input: {
+              type: 'object',
+              required: ['url', 'analysis'],
+              properties: {
+                url: {
+                  type: 'string',
+                  format: 'uri',
+                  description: 'The website URL to analyze',
+                },
+                analysis: {
+                  type: 'string',
+                  enum: ['standard', 'deep'],
+                  description: 'Analysis depth - determines the price charged',
+                },
+                webhookUrl: {
+                  type: 'string',
+                  format: 'uri',
+                  description:
+                    'HTTPS URL to notify when the analysis completes',
+                },
               },
             },
-          },
-          output: {
-            $schema: 'https://json-schema.org/draft/2020-12/schema',
-            type: 'object',
-            properties: {
-              analysisId: { type: 'string' },
-              status: {
-                type: 'string',
-                enum: ['queued', 'running', 'completed', 'failed', 'expired'],
+            output: {
+              type: 'object',
+              properties: {
+                analysisId: { type: 'string' },
+                status: {
+                  type: 'string',
+                  enum: ['queued', 'running', 'completed', 'failed', 'expired'],
+                },
+                analysis: { type: 'string', enum: ['standard', 'deep'] },
+                createdAt: { type: 'string', format: 'date-time' },
+                cached: { type: 'boolean' },
               },
-              analysis: { type: 'string', enum: ['standard', 'deep'] },
-              createdAt: { type: 'string', format: 'date-time' },
-              cached: { type: 'boolean' },
             },
           },
         },
