@@ -32,6 +32,17 @@ API_IMAGE="ghcr.io/${IMAGE_OWNER}/${REPO_NAME}-api:${IMAGE_TAG}"
 MIGRATOR_IMAGE="ghcr.io/${IMAGE_OWNER}/${REPO_NAME}-migrator:${IMAGE_TAG}"
 ENV_FILE="/opt/apps/sitelenz/.env"
 
+# Every deploy pulls a new immutable-SHA-tagged api image and a new migrator
+# image, and nothing ever removed the old ones — disk filled up over
+# repeated deploys until a pull failed with "no space left on device".
+# `docker image prune -af` only removes images not referenced by any
+# container, so the currently-running sitelenz-api's image is untouched;
+# it just clears out every previous deploy's now-unused tag. Runs before
+# login/pull so a deploy started with the disk already full has a chance
+# to recover space and succeed instead of failing again.
+echo "==> Pruning unused Docker images to reclaim disk space"
+docker image prune -af || true
+
 echo "==> Logging in to ghcr.io as ${GHCR_USER}"
 echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
 

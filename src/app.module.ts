@@ -9,6 +9,7 @@ import { BrowserModule } from './common/browser/browser.module';
 import { HttpLoggerMiddleware } from './common/middleware/http-logger.middleware';
 import { QueueModule } from './queue/queue.module';
 import { HealthModule } from './health/health.module';
+import { WellKnownModule } from './well-known/well-known.module';
 import { AnalysesModule } from './analyses/analyses.module';
 import { WorkersModule } from './workers/workers.module';
 import { AiModule } from './ai/ai.module';
@@ -23,6 +24,7 @@ import { WebhooksModule } from './webhooks/webhooks.module';
     BrowserModule,
     QueueModule,
     HealthModule,
+    WellKnownModule,
     AnalysesModule,
     WorkersModule,
     AiModule,

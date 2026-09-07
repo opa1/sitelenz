@@ -85,6 +85,89 @@ export class X402Guard implements CanActivate {
       mimeType: 'application/json',
     };
 
+    // Bazaar catalog listing: per the facilitator's integration guide
+    // (facilitator.goplausible.xyz/guide), a settled payment only gets
+    // auto-cataloged into /discovery/resources if the 402 response that
+    // preceded it carried a `bazaar` extension describing the resource's
+    // input/output shape — without it "payments process but the endpoint
+    // remains unlisted". We call x402ResourceServer directly (not the
+    // higher-level paymentMiddleware helper that builds this from a
+    // RouteConfig), so it's built by hand here and passed through the one
+    // low-level hook that exists for it: createPaymentRequiredResponse's
+    // `extensions` parameter. Only attached for the real POST resource — the
+    // GET route above is a discovery-probe decoy with no body/response of
+    // its own and must never itself get cataloged as a payable resource.
+    const bazaarExtension =
+      request.method === 'GET'
+        ? undefined
+        : {
+            bazaar: {
+              info: {
+                input: {
+                  type: 'http',
+                  method: 'POST',
+                  bodyType: 'json',
+                  body: { url: 'https://example.com', analysis: 'standard' },
+                },
+                output: {
+                  type: 'json',
+                  example: {
+                    analysisId: 'sl_an_01j8z9k3n8v5w6x7y8z9a0b1c2',
+                    status: 'queued',
+                    analysis: 'standard',
+                    createdAt: '2026-08-30T12:00:00.000Z',
+                  },
+                },
+              },
+              schema: {
+                input: {
+                  $schema: 'https://json-schema.org/draft/2020-12/schema',
+                  type: 'object',
+                  required: ['url', 'analysis'],
+                  properties: {
+                    url: {
+                      type: 'string',
+                      format: 'uri',
+                      description: 'The website URL to analyze',
+                    },
+                    analysis: {
+                      type: 'string',
+                      enum: ['standard', 'deep'],
+                      description:
+                        'Analysis depth — determines the price charged',
+                    },
+                    webhookUrl: {
+                      type: 'string',
+                      format: 'uri',
+                      description:
+                        'HTTPS URL to notify when the analysis completes',
+                    },
+                  },
+                },
+                output: {
+                  $schema: 'https://json-schema.org/draft/2020-12/schema',
+                  type: 'object',
+                  properties: {
+                    analysisId: { type: 'string' },
+                    status: {
+                      type: 'string',
+                      enum: [
+                        'queued',
+                        'running',
+                        'completed',
+                        'failed',
+                        'expired',
+                      ],
+                    },
+                    analysis: { type: 'string', enum: ['standard', 'deep'] },
+                    createdAt: { type: 'string', format: 'date-time' },
+                    cached: { type: 'boolean' },
+                  },
+                },
+              },
+            },
+          };
+
     const rawHeader = request.headers[X402_PAYMENT_HEADER];
     const paymentHeader = Array.isArray(rawHeader) ? rawHeader[0] : rawHeader;
 
@@ -94,6 +177,7 @@ export class X402Guard implements CanActivate {
           requirements,
           resourceInfo,
           'Payment required',
+          bazaarExtension,
         ),
       );
     }
@@ -107,6 +191,7 @@ export class X402Guard implements CanActivate {
           requirements,
           resourceInfo,
           'Invalid payment signature',
+          bazaarExtension,
         ),
       );
     }
@@ -121,6 +206,7 @@ export class X402Guard implements CanActivate {
           requirements,
           resourceInfo,
           'No matching payment requirements',
+          bazaarExtension,
         ),
       );
     }
@@ -135,6 +221,7 @@ export class X402Guard implements CanActivate {
           requirements,
           resourceInfo,
           verifyResult.invalidReason ?? 'Payment verification failed',
+          bazaarExtension,
         ),
       );
     }
@@ -149,6 +236,7 @@ export class X402Guard implements CanActivate {
           requirements,
           resourceInfo,
           settleResult.errorReason ?? 'Payment settlement failed',
+          bazaarExtension,
         ),
       );
     }
