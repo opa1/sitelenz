@@ -5,7 +5,7 @@ set -euo pipefail
 # script lives at /opt/apps/sitelenz/scripts/deploy.sh) via either:
 #   - CI over SSH, which exports IMAGE_OWNER/REPO_NAME/IMAGE_TAG/GHCR_USER/
 #     GHCR_TOKEN as environment variables before invoking this script, or
-#   - a manual rollback run on the server itself, with none of those set —
+#   - a manual rollback run on the server itself, with none of those set -
 #     in which case IMAGE_OWNER/REPO_NAME/IMAGE_TAG fall back to
 #     /opt/apps/sitelenz/image.env (edit IMAGE_TAG there to roll back), and
 #     GHCR_USER/GHCR_TOKEN must still be passed by hand. Credentials are
@@ -13,7 +13,7 @@ set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
 if [ -f image.env ] && [ -z "${IMAGE_OWNER:-}" ] && [ -z "${REPO_NAME:-}" ] && [ -z "${IMAGE_TAG:-}" ]; then
-  echo "==> No IMAGE_OWNER/REPO_NAME/IMAGE_TAG in the environment — sourcing image.env"
+  echo "==> No IMAGE_OWNER/REPO_NAME/IMAGE_TAG in the environment - sourcing image.env"
   set -a
   # shellcheck disable=SC1091
   source image.env
@@ -33,7 +33,7 @@ MIGRATOR_IMAGE="ghcr.io/${IMAGE_OWNER}/${REPO_NAME}-migrator:${IMAGE_TAG}"
 ENV_FILE="/opt/apps/sitelenz/.env"
 
 # Every deploy pulls a new immutable-SHA-tagged api image and a new migrator
-# image, and nothing ever removed the old ones — disk filled up over
+# image, and nothing ever removed the old ones - disk filled up over
 # repeated deploys until a pull failed with "no space left on device".
 # `docker image prune -af` only removes images not referenced by any
 # container, so the currently-running sitelenz-api's image is untouched;
@@ -48,27 +48,27 @@ echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
 
 echo "==> Pulling ${API_IMAGE}"
 if ! docker pull "$API_IMAGE"; then
-  echo "!! Failed to pull ${API_IMAGE} — logging out and aborting before touching the running container" >&2
+  echo "!! Failed to pull ${API_IMAGE} - logging out and aborting before touching the running container" >&2
   docker logout ghcr.io
   exit 1
 fi
 
 echo "==> Pulling ${MIGRATOR_IMAGE}"
 if ! docker pull "$MIGRATOR_IMAGE"; then
-  echo "!! Failed to pull ${MIGRATOR_IMAGE} — logging out and aborting before touching the running container" >&2
+  echo "!! Failed to pull ${MIGRATOR_IMAGE} - logging out and aborting before touching the running container" >&2
   docker logout ghcr.io
   exit 1
 fi
 
 docker logout ghcr.io
 
-echo "==> Both images pulled — running migrations against the shared postgres before touching sitelenz-api"
+echo "==> Both images pulled - running migrations against the shared postgres before touching sitelenz-api"
 if ! docker run --rm --network alpha --env-file "$ENV_FILE" "$MIGRATOR_IMAGE"; then
-  echo "!! Migration failed — aborting deploy, sitelenz-api left untouched" >&2
+  echo "!! Migration failed - aborting deploy, sitelenz-api left untouched" >&2
   exit 1
 fi
 
-echo "==> Migrations applied — recreating sitelenz-api"
+echo "==> Migrations applied - recreating sitelenz-api"
 if docker inspect sitelenz-api >/dev/null 2>&1; then
   docker rm -f sitelenz-api
 fi
@@ -92,14 +92,14 @@ if [ "$healthy" != true ]; then
   exit 1
 fi
 
-# Only reached after a passing health check — image.env is what
+# Only reached after a passing health check - image.env is what
 # sitelenz.service reads on boot, so it must never be updated to a tag that
 # hasn't actually been proven healthy. A failed health check above already
 # exited before this point, leaving whatever tag was last known-good in
 # place for reboot safety. Written to a temp file in the same directory
 # (so the final `mv` is a same-filesystem rename, not a copy) and moved
 # into place, so a crash mid-write can't leave a corrupt/partial image.env.
-echo "==> Health check passed — updating image.env for reboot safety"
+echo "==> Health check passed - updating image.env for reboot safety"
 image_env_tmp="$(mktemp image.env.XXXXXX)"
 cat > "$image_env_tmp" <<EOF
 IMAGE_OWNER=${IMAGE_OWNER}

@@ -12,7 +12,7 @@ export interface DismissalResult {
 /**
  * Known selectors for common cookie/consent-management platforms. Hiding
  * (not clicking "Accept") is deliberate: this tool never wants to be the one
- * "consenting" to anything on a site's behalf — it only needs the overlay
+ * "consenting" to anything on a site's behalf - it only needs the overlay
  * out of the way for a clean screenshot.
  */
 const KNOWN_OVERLAY_SELECTORS = [
@@ -64,7 +64,7 @@ export class BlockerDismissalService {
    * Hides anything obscuring the page (cookie banners, promo popups, age
    * gates, ...) before a screenshot is taken. Tries fast, deterministic
    * heuristics first; only calls out to a Groq vision model if those find
-   * nothing, since that's the fallback path — not the primary mechanism.
+   * nothing, since that's the fallback path - not the primary mechanism.
    */
   async dismissBlockers(page: Page): Promise<DismissalResult> {
     const knownHidden = await this.hideKnownSelectors(page);
@@ -154,11 +154,11 @@ export class BlockerDismissalService {
       return { dismissed: false, method: 'none' };
     }
 
-    // Vision-model coordinates are approximate, sometimes badly so — matching
+    // Vision-model coordinates are approximate, sometimes badly so - matching
     // a single point via elementFromPoint() can land on a full-page
     // background element instead of the actual overlay. Instead:
     // 1. Only consider fixed/sticky candidates within a plausible overlay
-    //    size range (3%-60% of viewport) — this alone excludes full-page
+    //    size range (3%-60% of viewport) - this alone excludes full-page
     //    backgrounds structurally, regardless of how imprecise the AI's box
     //    is, which is what actually matters for safety.
     // 2. Prefer whichever candidate the AI's box overlaps most; if it

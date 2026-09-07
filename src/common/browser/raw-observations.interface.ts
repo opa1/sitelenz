@@ -43,7 +43,7 @@ export interface ResourceSummary {
 }
 
 /**
- * Loose passthrough for Lighthouse's LHR (Lighthouse Result) JSON — its real
+ * Loose passthrough for Lighthouse's LHR (Lighthouse Result) JSON - its real
  * type lives in an ESM-only package with an awkward type surface to consume
  * from a CJS build; the worker/report layer only stores this, it doesn't
  * inspect specific fields in this phase.

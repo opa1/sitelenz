@@ -29,10 +29,10 @@ export class GroqService {
    * Asks a Groq vision model whether a screenshot is blocked by a modal,
    * cookie/consent banner, newsletter popup, age gate, etc., and if so, its
    * approximate pixel bounding box within the given viewport dimensions.
-   * Returns null on any failure (network, bad JSON, missing key) — this is
+   * Returns null on any failure (network, bad JSON, missing key) - this is
    * a best-effort fallback, never a hard dependency.
    *
-   * Deliberately does not use response_format: json_object — Groq's
+   * Deliberately does not use response_format: json_object - Groq's
    * server-side JSON-schema enforcement on this vision model proved flaky in
    * practice (400 json_validate_failed with an empty failed_generation, even
    * at temperature 0, on otherwise-valid requests). Plain-text mode plus
@@ -86,7 +86,7 @@ export class GroqService {
                 `This is a ${viewport.width}x${viewport.height} pixel screenshot of a website's viewport. ` +
                 'Determine whether a modal dialog, cookie/consent banner, newsletter or promo popup, ' +
                 'age-verification gate, or similar overlay is blocking the main page content. ' +
-                'Respond with only a single JSON object and nothing else — no markdown, no explanation — ' +
+                'Respond with only a single JSON object and nothing else - no markdown, no explanation - ' +
                 'in exactly this shape: ' +
                 '{"hasBlocker": boolean, "box": {"x": number, "y": number, "width": number, "height": number} | null}. ' +
                 `"box" must be pixel coordinates within the ${viewport.width}x${viewport.height} image bounding ` +

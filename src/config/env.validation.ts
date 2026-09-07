@@ -2,7 +2,7 @@ import * as Joi from 'joi';
 import { DEFAULT_GROQ_MODEL } from './configuration';
 
 // Deployment prep: only the ACTIVE network's core fields (node URL, payTo,
-// USDC asset id) are required at boot — this is what lets NETWORK be the
+// USDC asset id) are required at boot - this is what lets NETWORK be the
 // only thing that changes between a testnet and a mainnet deploy. The
 // inactive network's fields stay optional so e.g. a mainnet deploy doesn't
 // also need testnet values filled in.
@@ -29,7 +29,7 @@ export const envValidationSchema = Joi.object({
 
   DATABASE_URL: Joi.string().required(),
   REDIS_URL: Joi.string().required(),
-  // Namespaces every BullMQ key this app writes — required when Redis is a
+  // Namespaces every BullMQ key this app writes - required when Redis is a
   // shared instance across multiple apps (see queue.module.ts), optional
   // for a dedicated Redis where BullMQ's own default prefix is fine.
   REDIS_KEY_PREFIX: Joi.string().allow('').default(''),

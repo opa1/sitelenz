@@ -18,7 +18,7 @@ export class CreateAnalysisDto {
   url: string;
 
   @ApiProperty({
-    description: 'Analysis depth — determines the x402 price charged',
+    description: 'Analysis depth - determines the x402 price charged',
     enum: AnalysisType,
     example: AnalysisType.standard,
   })

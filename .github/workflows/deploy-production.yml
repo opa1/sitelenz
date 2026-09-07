@@ -37,7 +37,7 @@ jobs:
         # No *.spec.ts files exist in this repo yet. Jest's default behavior
         # is to exit non-zero when it finds zero matching test files, which
         # would fail this step on every single run regardless of the app's
-        # correctness — --passWithNoTests keeps this step meaningful (it
+        # correctness - --passWithNoTests keeps this step meaningful (it
         # still runs and fails real test failures) without being a red
         # pipeline over an empty test suite. Remove it once real tests land.
         run: npm test -- --passWithNoTests
@@ -119,7 +119,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Only compose.yml and scripts/ are synced — .env is server state and
+      # Only compose.yml and scripts/ are synced - .env is server state and
       # must never be overwritten by a deploy.
       - name: Sync deploy files to server
         uses: appleboy/scp-action@v1

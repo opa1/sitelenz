@@ -9,7 +9,7 @@ const EXCLUDED_PATHS = new Set(['/health']);
 // middie-style shim operating on the raw Node req/res, not a Fastify
 // request/reply. That shim rewrites `req.url` to be relative to the
 // middleware's mount point (standard connect/Express behavior) while
-// preserving the true full request path on `req.originalUrl` — which isn't
+// preserving the true full request path on `req.originalUrl` - which isn't
 // part of Node's IncomingMessage type, hence this extension.
 interface MiddlewareRequest extends IncomingMessage {
   originalUrl?: string;

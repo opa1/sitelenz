@@ -37,7 +37,7 @@ export class WebhookProcessor extends WorkerHost {
     super();
   }
 
-  // Never throws — a delivery failure is recorded and retried via a new
+  // Never throws - a delivery failure is recorded and retried via a new
   // delayed job we schedule ourselves, not via BullMQ's own attempts/backoff
   // (jobs are added without an `attempts` option, so we own the schedule).
   async process(job: Job<WebhookDeliveryJobData>): Promise<void> {

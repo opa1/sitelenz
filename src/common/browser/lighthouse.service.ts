@@ -13,7 +13,7 @@ const LIGHTHOUSE_CATEGORIES = [
  * Runs Lighthouse against BrowserService's shared Chromium over CDP (via its
  * --remote-debugging-port), rather than spawning a separate Chrome. When no
  * `page` argument is given, Lighthouse's own runner connects to that port
- * itself (puppeteer.connect({ browserURL })) and drives its own tab — this is
+ * itself (puppeteer.connect({ browserURL })) and drives its own tab - this is
  * the documented fallback path in Lighthouse's navigation runner, not a
  * workaround.
  */

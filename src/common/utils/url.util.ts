@@ -7,7 +7,7 @@ export function getHostname(url: string): string | null {
 }
 
 /**
- * Naive eTLD+1 approximation (last two labels) — no public suffix list, so
+ * Naive eTLD+1 approximation (last two labels) - no public suffix list, so
  * multi-part TLDs like `.co.uk` collapse to the wrong "base" domain. Good
  * enough for grouping first-party vs third-party requests, not for anything
  * that needs to be exact.

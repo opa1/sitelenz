@@ -10,7 +10,7 @@ export class AnalysisReportPendingResponseDto {
     enum: ['queued', 'running', 'failed', 'expired'],
     example: 'running',
     description:
-      'Current status. Never "completed" for this response shape — a completed analysis returns the report body directly instead.',
+      'Current status. Never "completed" for this response shape - a completed analysis returns the report body directly instead.',
   })
   status: PendingAnalysisStatus;
 

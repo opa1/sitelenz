@@ -4,7 +4,7 @@ import { SkipThrottle } from '@nestjs/throttler';
 import { AppConfigService } from '../config';
 
 // The 10/min 'analysis-create' tier is scoped to POST /v1/analyses only
-// (see analyses.controller.ts) — skip it here so health checks are subject
+// (see analyses.controller.ts) - skip it here so health checks are subject
 // solely to the 'global' 200/min tier.
 @SkipThrottle({ 'analysis-create': true })
 @ApiTags('health')

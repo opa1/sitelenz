@@ -47,7 +47,7 @@ export class AppConfigService {
 
   /**
    * BullMQ's `prefix` option is a path segment BullMQ itself joins with
-   * `:` (producing `"<prefix>:<queue>:..."`) — a trailing colon in the env
+   * `:` (producing `"<prefix>:<queue>:..."`) - a trailing colon in the env
    * var (e.g. "sitelenz:") would double up, so it's stripped here rather
    * than requiring the operator to get the format exactly right.
    */

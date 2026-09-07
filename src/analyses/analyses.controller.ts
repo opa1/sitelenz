@@ -29,7 +29,7 @@ import { AnalysisStatusResponseDto } from './dto/analysis-status-response.dto';
 import { AnalysisReportPendingResponseDto } from './dto/analysis-report-pending-response.dto';
 import { RetryAnalysisResponseDto } from './dto/retry-analysis-response.dto';
 
-// The stricter 'analysis-create' tier only makes sense on POST — skip it
+// The stricter 'analysis-create' tier only makes sense on POST - skip it
 // here at the class level and re-enable + configure it on just that route
 // below. Every route here (including this class-level default) still gets
 // the 'global' 200/min tier from the app-wide guard.
@@ -66,7 +66,7 @@ export class AnalysesController {
   })
   @ApiResponse({
     status: 402,
-    description: 'Payment required — raw x402 PaymentRequired body',
+    description: 'Payment required - raw x402 PaymentRequired body',
     schema: {
       example: {
         x402Version: 2,
@@ -113,7 +113,7 @@ export class AnalysesController {
   // to catalog them. The real endpoint is POST-only, so without this route
   // the doctor gets a 404 and can never see our 402 challenge. X402Guard
   // runs as a normal @UseGuards() here (no URL-validation ordering trick
-  // needed — this route never queues anything), fires before the handler,
+  // needed - this route never queues anything), fires before the handler,
   // and returns 402 on every unpaid request. The handler itself is dead code.
   @Get()
   @UseGuards(X402Guard)
@@ -146,12 +146,12 @@ export class AnalysesController {
   @ApiOperation({
     summary: 'Get the full analysis report',
     description:
-      'Returns the stored report once the analysis has completed. No x402 payment is required here — the analysis was already paid for when it was created. While the analysis is still queued/running, or if it failed, responds 202 with a status/message body instead of the report.',
+      'Returns the stored report once the analysis has completed. No x402 payment is required here - the analysis was already paid for when it was created. While the analysis is still queued/running, or if it failed, responds 202 with a status/message body instead of the report.',
   })
   @ApiParam({ name: 'id', example: 'sl_an_01j8z9k3n8v5w6x7y8z9a0b1c2' })
   @ApiResponse({
     status: 200,
-    description: 'Analysis completed — full stored report JSON',
+    description: 'Analysis completed - full stored report JSON',
     schema: { type: 'object' },
   })
   @ApiResponse({
@@ -187,7 +187,7 @@ export class AnalysesController {
   @ApiOperation({
     summary: 'Retry a failed analysis',
     description:
-      'Re-queues a previously failed analysis for the same URL and analysis type. No x402 payment is required — the analysis was already paid for when it was originally created. Only analyses currently in the "failed" state can be retried.',
+      'Re-queues a previously failed analysis for the same URL and analysis type. No x402 payment is required - the analysis was already paid for when it was originally created. Only analyses currently in the "failed" state can be retried.',
   })
   @ApiParam({ name: 'id', example: 'sl_an_01j8z9k3n8v5w6x7y8z9a0b1c2' })
   @ApiResponse({

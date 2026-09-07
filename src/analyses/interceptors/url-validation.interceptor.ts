@@ -18,7 +18,7 @@ import { X402Guard } from '../../x402/x402.guard';
  * NestJS always runs guards before interceptors and pipes, so a pipe or a
  * plain interceptor cannot itself execute ahead of a guard attached via
  * @UseGuards(). Instead, X402Guard is no longer attached via @UseGuards() on
- * this route — it is left completely unmodified and its canActivate() is
+ * this route - it is left completely unmodified and its canActivate() is
  * invoked here, manually, only after URL validation has already passed.
  */
 @Injectable()
@@ -38,7 +38,7 @@ export class UrlValidationInterceptor implements NestInterceptor {
 
     if (typeof url !== 'string' || url.length === 0) {
       // A missing/non-string url would otherwise fail CreateAnalysisDto's
-      // @IsNotEmpty() validation later in the pipe stage — but that stage
+      // @IsNotEmpty() validation later in the pipe stage - but that stage
       // runs after the guard, so a missing url must be rejected here too,
       // not just a malformed one, to keep it from ever reaching payment.
       throw new InvalidUrlException('URL is required');

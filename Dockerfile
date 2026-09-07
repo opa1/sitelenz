@@ -1,11 +1,11 @@
 # syntax=docker/dockerfile:1
 #
-# Production image for OCI ARM64 (also builds fine on amd64 — see the CI
+# Production image for OCI ARM64 (also builds fine on amd64 - see the CI
 # workflow's multi-platform build). Replaces the previous Render-specific
 # image (mcr.microsoft.com/playwright:*-noble) entirely.
 
 # =============================================================================
-# Builder — full (dev+prod) dependencies and the TypeScript build. Nothing
+# Builder - full (dev+prod) dependencies and the TypeScript build. Nothing
 # from this stage ships except the compiled `dist/` output and the generated
 # Prisma client (copied explicitly below, not the whole node_modules).
 # =============================================================================
@@ -17,9 +17,9 @@ COPY package.json package-lock.json ./
 COPY prisma ./prisma/
 
 # `postinstall` runs `prisma generate`, which only reads prisma/schema.prisma
-# (no DB connection needed — this app uses @prisma/adapter-pg driver
+# (no DB connection needed - this app uses @prisma/adapter-pg driver
 # adapters, so Prisma's own DATABASE_URL resolution is never invoked either
-# at generate time or at runtime) — the schema must exist before this runs.
+# at generate time or at runtime) - the schema must exist before this runs.
 RUN npm ci
 
 COPY . .
@@ -27,11 +27,11 @@ COPY . .
 RUN npm run build
 
 # =============================================================================
-# Migrator — runs `prisma migrate deploy` against the shared postgres before
+# Migrator - runs `prisma migrate deploy` against the shared postgres before
 # a new sitelenz-api container is allowed to serve traffic (see
 # deploy/scripts/deploy.sh). Built straight from the builder stage rather
 # than a fresh minimal install: `prisma` (the CLI) is a devDependency, so
-# the production stage below deliberately excludes it — but the migrator's
+# the production stage below deliberately excludes it - but the migrator's
 # entire purpose IS the CLI, and the builder stage already has it correctly
 # resolved via a full `npm ci`, plus prisma/ and prisma7.config.ts (copied
 # in via `COPY . .` above, since that file lives at the repo root, not
@@ -42,14 +42,14 @@ RUN npm run build
 FROM builder AS migrator
 
 # Prisma 7 auto-discovers prisma7.config.ts specifically (checked before the
-# legacy prisma.config.ts — Prisma versions its own config filename), whose
+# legacy prisma.config.ts - Prisma versions its own config filename), whose
 # `datasource.url` reads `process.env["DATABASE_URL"]`. That's why nothing
 # is baked in here: DATABASE_URL must come from the container's environment
 # at `docker run` time (`--env-file /opt/apps/sitelenz/.env`), not the image.
 ENTRYPOINT ["npx", "prisma", "migrate", "deploy"]
 
 # =============================================================================
-# Production — lean runtime image.
+# Production - lean runtime image.
 # =============================================================================
 FROM node:24-bookworm-slim AS production
 
@@ -58,12 +58,12 @@ ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
 
 WORKDIR /app
 
-# System libraries Chromium needs to actually render pages — Playwright
+# System libraries Chromium needs to actually render pages - Playwright
 # ships the browser binary but never these. This exact list (both the
 # `chromium` libs and the `tools` font packages) is taken verbatim from
 # Playwright 1.62.1's own dependency registry for "debian12-x64"/
 # "debian12-arm64" (playwright-core/src/server/registry/nativeDeps.ts,
-# checked directly against the installed package — not assembled by hand or
+# checked directly against the installed package - not assembled by hand or
 # copied from a blog post, which is exactly the kind of list that works on
 # amd64 and silently breaks on arm64 three months later). The font packages
 # aren't cosmetic: without them Chromium still runs, but screenshots of any
@@ -104,7 +104,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY package.json package-lock.json ./
 COPY prisma ./prisma/
 
-# --omit=dev: `prisma` (the CLI) is a devDependency — only @prisma/client and
+# --omit=dev: `prisma` (the CLI) is a devDependency - only @prisma/client and
 # @prisma/adapter-pg (the runtime pieces) are real dependencies. --ignore-scripts
 # is required because of that: without it, npm's own `postinstall` hook would
 # try to run `prisma generate` with no `prisma` CLI present and fail the
@@ -113,7 +113,7 @@ COPY prisma ./prisma/
 RUN npm ci --omit=dev --ignore-scripts
 
 # The client Prisma actually generates (query compiler + types) lives in
-# node_modules/.prisma/client — @prisma/client itself (installed above) is
+# node_modules/.prisma/client - @prisma/client itself (installed above) is
 # just the static package that re-exports from it at runtime. Prisma 7's
 # query compiler is WASM, not a native binary, so this is safe to copy
 # as-is between two stages built from the identical base image/Node version.
@@ -126,9 +126,10 @@ COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
 RUN npx playwright install chromium
 
 COPY --from=builder /app/dist ./dist
+COPY public ./public
 
 # BrowserService (src/common/browser/browser.service.ts) already launches
-# Chromium with --no-sandbox/--disable-setuid-sandbox — that's what makes it
+# Chromium with --no-sandbox/--disable-setuid-sandbox - that's what makes it
 # safe to run this process as a non-root user: Chromium's kernel sandbox
 # needs privileges this user doesn't have, and those launch args are how
 # it's told not to rely on it.
@@ -140,7 +141,7 @@ EXPOSE 3002
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
   CMD node -e "require('http').get('http://127.0.0.1:3002/health',(r)=>{process.exit(r.statusCode===200?0:1)}).on('error',()=>process.exit(1))"
 
-# Real entry point — the project's own package.json ("start"/"start:prod")
+# Real entry point - the project's own package.json ("start"/"start:prod")
 # and nest-cli.json (sourceRoot: "src") both confirm the build output lands
 # at dist/src/main.js, not dist/main.js.
 CMD ["node", "dist/src/main.js"]

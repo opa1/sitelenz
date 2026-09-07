@@ -131,7 +131,7 @@ export class AnalysisProcessor extends WorkerHost {
 
       await setStage(PROGRESS_STAGE.ANALYZING);
       const analyzerOptions = { deep };
-      // Run in sequence, not in parallel — a later analyzer may eventually
+      // Run in sequence, not in parallel - a later analyzer may eventually
       // want an earlier one's output as context.
       const technologyResult = await this.technologyAnalyzer.analyze(
         observations,
@@ -213,7 +213,7 @@ export class AnalysisProcessor extends WorkerHost {
 
       await setStage(PROGRESS_STAGE.SENDING_WEBHOOK);
       if (webhookUrl) {
-        // enqueue and move on — the actual HTTP delivery (and its retries)
+        // enqueue and move on - the actual HTTP delivery (and its retries)
         // happen asynchronously in WebhookProcessor, not on this critical path.
         await this.webhookService
           .deliver(analysisId, 'analysis.completed', {
@@ -259,7 +259,7 @@ export class AnalysisProcessor extends WorkerHost {
         stack: error instanceof Error ? error.stack : undefined,
       });
 
-      // progressStage is deliberately left untouched here — it already
+      // progressStage is deliberately left untouched here - it already
       // holds whatever stage setStage() last wrote, which is exactly where
       // the pipeline died. Overwriting it with a generic "failed" marker
       // would destroy that information.
@@ -328,7 +328,7 @@ export class AnalysisProcessor extends WorkerHost {
         );
       }
 
-      // Viewport-only, not the full scrolled page — a fixed-size frame
+      // Viewport-only, not the full scrolled page - a fixed-size frame
       // rather than an arbitrarily tall image.
       const buffer = await page.screenshot({ fullPage: false, type: 'png' });
       const uploaded = await this.cloudinaryService.uploadScreenshot(

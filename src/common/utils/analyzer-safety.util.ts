@@ -10,7 +10,7 @@ const logger = new Logger('AnalyzerSafety');
 export function createSafe(analyzerName: string) {
   /**
    * Runs a synchronous sub-check and swallows any error so one broken
-   * detection can't fail the whole analyzer. Logs a warning first — a
+   * detection can't fail the whole analyzer. Logs a warning first - a
    * silent fallback previously made it impossible to tell which specific
    * detector inside which analyzer was failing.
    */

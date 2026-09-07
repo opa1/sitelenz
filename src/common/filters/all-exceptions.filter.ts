@@ -10,6 +10,8 @@ import {
 } from '@nestjs/common';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { ThrottlerException } from '@nestjs/throttler';
+import { encodePaymentRequiredHeader } from '@x402/core/http';
+import type { PaymentRequired } from '@x402/core/types';
 import { X402PaymentRequiredException } from '../../x402/exceptions/x402-payment-required.exception';
 import { InvalidUrlException } from '../exceptions/invalid-url.exception';
 import { CapacityExceededException } from '../exceptions/capacity-exceeded.exception';
@@ -27,11 +29,20 @@ export class AllExceptionsFilter implements ExceptionFilter {
     const reply = host.switchToHttp().getResponse<FastifyReply>();
     const request = host.switchToHttp().getRequest<FastifyRequest>();
 
-    // x402 PaymentRequired carries its own protocol shape — never wrap it.
+    // x402 PaymentRequired carries its own protocol shape - never wrap it.
+    // Also echoed as a base64 PAYMENT-REQUIRED header (in addition to the
+    // JSON body) - strict x402 v2 clients read the challenge from the
+    // header and treat a body-only challenge as malformed (flagged by a
+    // live x402 Doctor report against this API before this was added).
     if (exception instanceof X402PaymentRequiredException) {
+      const paymentRequired = exception.getResponse() as PaymentRequired;
       void reply
         .status(HttpStatus.PAYMENT_REQUIRED)
-        .send(exception.getResponse());
+        .header(
+          'PAYMENT-REQUIRED',
+          encodePaymentRequiredHeader(paymentRequired),
+        )
+        .send(paymentRequired);
       return;
     }
 
@@ -43,7 +54,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
     }
 
     // Exact required message, not the library's own "ThrottlerException:
-    // Too Many Requests" — checked before the generic HttpException branch.
+    // Too Many Requests" - checked before the generic HttpException branch.
     if (exception instanceof ThrottlerException) {
       void reply
         .status(HttpStatus.TOO_MANY_REQUESTS)
@@ -53,7 +64,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
       return;
     }
 
-    // Same 429 status as ThrottlerException but a distinct code — this is
+    // Same 429 status as ThrottlerException but a distinct code - this is
     // capacity admission control, not a per-IP request-frequency limit.
     if (exception instanceof CapacityExceededException) {
       void reply
@@ -70,7 +81,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
       return;
     }
 
-    // Also subclasses BadRequestException — check before the generic branch.
+    // Also subclasses BadRequestException - check before the generic branch.
     if (exception instanceof AnalysisNotFailedException) {
       void reply
         .status(HttpStatus.BAD_REQUEST)
@@ -123,7 +134,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
       .send(this.body('INTERNAL_ERROR', 'An unexpected error occurred'));
   }
 
-  // Every exception that reaches the client as a 500 goes through here —
+  // Every exception that reaches the client as a 500 goes through here -
   // this is why 500s used to show no detail in the logs at all: a thrown
   // InternalServerErrorException took the generic HttpException branch
   // above, which never logged anything.

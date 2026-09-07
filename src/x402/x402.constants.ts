@@ -15,7 +15,7 @@ export const X402_MAX_TIMEOUT_SECONDS = 60;
 /**
  * Algorand Global x402 Challenge leaderboard tag. See the research note in
  * x402.module.ts for how this was confirmed (extra.tag on the built payment
- * requirement, not a `tags`/`metadata` field — @x402/core's ResourceConfig
+ * requirement, not a `tags`/`metadata` field - @x402/core's ResourceConfig
  * has neither).
  */
 export const X402_GLOBAL_CHALLENGE_TAG = 'x402-global-challenge';
@@ -25,7 +25,7 @@ export const X402_GLOBAL_CHALLENGE_TAG = 'x402-global-challenge';
  * @x402/avm's own shortened `ALGORAND_*_CAIP2` exports. The live GoPlausible
  * facilitator's /supported endpoint currently advertises networks using the
  * full genesis hash, and x402ResourceServer matches facilitator support with
- * an exact string comparison — the shortened constants do not match what the
+ * an exact string comparison - the shortened constants do not match what the
  * facilitator returns and cause buildPaymentRequirements() to throw. The AVM
  * scheme's own normalizeAlgorandNetwork() treats both forms as equivalent, so
  * using the full-hash form here is safe and matches what the facilitator

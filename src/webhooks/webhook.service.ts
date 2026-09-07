@@ -20,7 +20,7 @@ export class WebhookService {
 
   /**
    * Creates the WebhookDelivery record and enqueues the first delivery
-   * attempt. Only does fast local work (two DB calls + an enqueue) — the
+   * attempt. Only does fast local work (two DB calls + an enqueue) - the
    * actual HTTP round trip happens later in WebhookProcessor, so this
    * resolves quickly and never delays the caller.
    */
@@ -36,7 +36,7 @@ export class WebhookService {
     const webhookUrl = analysis?.webhookUrl;
     if (!webhookUrl) {
       this.logger.warn(
-        `deliver() called for analysis ${analysisId} with no webhookUrl configured — skipping`,
+        `deliver() called for analysis ${analysisId} with no webhookUrl configured - skipping`,
       );
       return;
     }

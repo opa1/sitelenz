@@ -9,7 +9,7 @@ Built for the [Algorand Global x402 Challenge](https://algorand.co/global-x402-c
 ## How It Works
 
 1. A client sends `POST /v1/analyses` with `{ url, analysis, webhookUrl? }`.
-2. The URL is validated first — protocol allowlist, DNS resolution, and rejection of private/reserved/loopback addresses (SSRF protection) — before any payment is enforced, so an invalid or unsafe URL never charges the caller.
+2. The URL is validated first - protocol allowlist, DNS resolution, and rejection of private/reserved/loopback addresses (SSRF protection) - before any payment is enforced, so an invalid or unsafe URL never charges the caller.
 3. If a completed analysis of the same URL and type already exists within the cache TTL, it is returned immediately with `cached: true` and no new payment or job is created.
 4. Otherwise the request must carry a `PAYMENT-SIGNATURE` header. If it is missing or invalid, the API responds `402 Payment Required` with the x402 payment requirements: an Algorand `exact`-scheme USDC transfer, priced per analysis type.
 5. The client signs the required USDC transfer (via any x402-compatible Algorand client, such as `@x402/core` + `@x402/avm`) and retries the same request with the `PAYMENT-SIGNATURE` header attached.
@@ -25,7 +25,7 @@ Built for the [Algorand Global x402 Challenge](https://algorand.co/global-x402-c
 
 | Analyzer | Standard ($1) | Deep ($2) |
 |---|---|---|
-| Technology | Framework/CMS/infrastructure/analytics/payments/CSS-framework/font detection with confidence scores | Adds `additionalLibraries` — inline and externally-loaded JS library detection |
+| Technology | Framework/CMS/infrastructure/analytics/payments/CSS-framework/font detection with confidence scores | Adds `additionalLibraries` - inline and externally-loaded JS library detection |
 | SEO | Title, meta description, canonical, robots directives, Open Graph, Twitter Card, headings, image alt coverage, structured data, Lighthouse SEO score | Adds `robots.txt` audit, sitemap discovery, and hreflang detection |
 | Security | HTTPS/mixed-content check, security headers (HSTS, CSP, X-Content-Type-Options, X-Frame-Options, Referrer-Policy, Permissions-Policy), security score | Adds cookie flag audit (`Secure`/`HttpOnly`/`SameSite`) and TLS certificate inspection |
 | Performance | Lighthouse core metrics (LCP, CLS, FCP, TBT, TTFB, Speed Index), page weight, browser timing, image optimization, caching headers | Adds resource inventory (scripts/stylesheets/images/fonts) and third-party domain analysis |
@@ -52,11 +52,11 @@ Request body:
 }
 ```
 
-- `url` — the website to analyze (required).
-- `analysis` — `"standard"` or `"deep"` (required); determines the price charged.
-- `webhookUrl` — HTTPS URL to notify on completion or failure (optional).
+- `url` - the website to analyze (required).
+- `analysis` - `"standard"` or `"deep"` (required); determines the price charged.
+- `webhookUrl` - HTTPS URL to notify on completion or failure (optional).
 
-Response — `200 OK` (payment settled, job queued or cached result returned):
+Response - `200 OK` (payment settled, job queued or cached result returned):
 
 ```json
 {
@@ -67,7 +67,7 @@ Response — `200 OK` (payment settled, job queued or cached result returned):
 }
 ```
 
-Response — `402 Payment Required` (no or invalid `PAYMENT-SIGNATURE` header):
+Response - `402 Payment Required` (no or invalid `PAYMENT-SIGNATURE` header):
 
 ```json
 {
@@ -98,7 +98,7 @@ Response — `402 Payment Required` (no or invalid `PAYMENT-SIGNATURE` header):
 Full x402 flow with curl:
 
 ```bash
-# 1. Initial request — no payment attached, gets 402 back
+# 1. Initial request - no payment attached, gets 402 back
 curl -i -X POST https://api.sitelenz.dev/v1/analyses \
   -H "Content-Type: application/json" \
   -d '{"url":"https://example.com","analysis":"standard"}'
@@ -131,11 +131,11 @@ Returns current status and progress.
 
 ### GET /v1/analyses/:id/report
 
-No payment required — the analysis was already paid for at creation.
+No payment required - the analysis was already paid for at creation.
 
-Response — `200 OK` once the analysis has completed: the full report object (see [Report Structure](#report-structure)).
+Response - `200 OK` once the analysis has completed: the full report object (see [Report Structure](#report-structure)).
 
-Response — `202 Accepted` while queued, running, or if it failed:
+Response - `202 Accepted` while queued, running, or if it failed:
 
 ```json
 {
@@ -145,7 +145,7 @@ Response — `202 Accepted` while queued, running, or if it failed:
 }
 ```
 
-Response — `404 Not Found` if the id does not exist.
+Response - `404 Not Found` if the id does not exist.
 
 ### GET /health
 
@@ -162,7 +162,7 @@ Response — `404 Not Found` if the id does not exist.
 
 ## x402 Payment Flow
 
-SiteLenz speaks x402 protocol v2 over Algorand. On the client side, the same ecosystem libraries this backend uses on the server (`@x402/core` and `@x402/avm`) can drive the payment automatically — there is no separate `@x402/client` package; the client-side pieces live at the `@x402/core/client` and `@x402/avm/exact/client` subpaths.
+SiteLenz speaks x402 protocol v2 over Algorand. On the client side, the same ecosystem libraries this backend uses on the server (`@x402/core` and `@x402/avm`) can drive the payment automatically - there is no separate `@x402/client` package; the client-side pieces live at the `@x402/core/client` and `@x402/avm/exact/client` subpaths.
 
 A minimal automated client:
 
@@ -170,7 +170,7 @@ A minimal automated client:
 import { x402Client, x402HTTPClient } from '@x402/core/client';
 import { ExactAvmScheme } from '@x402/avm/exact/client';
 
-// Any signer implementing { address, signTransactions() } works — a
+// Any signer implementing { address, signTransactions() } works - a
 // Pera/Lute wallet adapter in a browser, or an Algorand SDK account in a
 // script or agent.
 const signer = {
@@ -350,12 +350,12 @@ An AI agent integrating against SiteLenz follows the same pattern: attempt the r
     "accessibility": { "score": 88, "audits": [] }
   },
   "ai": {
-    "summary": "A minimal static placeholder page with no framework, tracking, or business functionality — suitable as a documentation example but not representative of a production site.",
+    "summary": "A minimal static placeholder page with no framework, tracking, or business functionality - suitable as a documentation example but not representative of a production site.",
     "strengths": ["Fast load time", "Valid HTTPS with no mixed content"],
     "weaknesses": ["No security headers configured", "No meta description for search snippets"],
     "notableFindings": ["Page is IANA's example.com placeholder domain"],
     "technicalInterpretation": "Server responds with minimal headers and no CSP/HSTS; page weight is negligible at under 7KB.",
-    "businessInterpretation": "No discoverable business signals — appears to be a reference/test domain rather than a live business site.",
+    "businessInterpretation": "No discoverable business signals - appears to be a reference/test domain rather than a live business site.",
     "recommendations": [
       {
         "priority": "medium",
@@ -507,7 +507,7 @@ An AI agent integrating against SiteLenz follows the same pattern: attempt the r
 
 ## Deployment
 
-SiteLenz ships with a `Procfile` (`web: node dist/src/main.js`) for platforms like Railway or Render that build from a standard Node buildpack — run `npm run build` then deploy, with `npm run start:prod` as the local equivalent of the Procfile's command. All configuration is environment-driven, so moving from testnet to a live mainnet deployment only requires setting `NETWORK=mainnet` along with the corresponding `MAINNET_*` variables (node URL, facilitator URL, payout address, and USDC asset id); no code changes are needed to switch networks.
+SiteLenz ships with a `Procfile` (`web: node dist/src/main.js`) for platforms like Railway or Render that build from a standard Node buildpack - run `npm run build` then deploy, with `npm run start:prod` as the local equivalent of the Procfile's command. All configuration is environment-driven, so moving from testnet to a live mainnet deployment only requires setting `NETWORK=mainnet` along with the corresponding `MAINNET_*` variables (node URL, facilitator URL, payout address, and USDC asset id); no code changes are needed to switch networks.
 
 ---
 

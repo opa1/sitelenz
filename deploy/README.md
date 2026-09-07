@@ -1,6 +1,6 @@
 # Deploying SiteLenz
 
-Production deploy target: OCI ARM64 Ubuntu 24.04 VM (`129.213.16.57`), behind Caddy at `api.sitelenz.online`. The app itself never binds a public port — it listens on `127.0.0.1:3002` only, and Caddy reverse-proxies to it.
+Production deploy target: OCI ARM64 Ubuntu 24.04 VM (`129.213.16.57`), behind Caddy at `api.sitelenz.online`. The app itself never binds a public port - it listens on `127.0.0.1:3002` only, and Caddy reverse-proxies to it.
 
 ## First-time server setup
 
@@ -12,14 +12,14 @@ Run once, on the server, before the first CI deploy.
    sudo mkdir -p /opt/apps/sitelenz/scripts
    ```
 
-2. Copy `.env.example` to `/opt/apps/sitelenz/.env` and fill in every `REPLACE_*` value (Postgres password, Redis password, Cloudinary credentials, Groq API key, a random `WEBHOOK_SECRET`, and the Algorand payout address for whichever `NETWORK` is active). This file is server state — it is never synced by CI and must never be committed.
+2. Copy `.env.example` to `/opt/apps/sitelenz/.env` and fill in every `REPLACE_*` value (Postgres password, Redis password, Cloudinary credentials, Groq API key, a random `WEBHOOK_SECRET`, and the Algorand payout address for whichever `NETWORK` is active). This file is server state - it is never synced by CI and must never be committed.
 
    ```bash
    cp .env.example /opt/apps/sitelenz/.env
    $EDITOR /opt/apps/sitelenz/.env
    ```
 
-3. Create `/opt/apps/sitelenz/image.env` — this is only a fallback for manual/rollback runs of `deploy.sh` (normal CI deploys pass these as environment variables directly and never touch this file):
+3. Create `/opt/apps/sitelenz/image.env` - this is only a fallback for manual/rollback runs of `deploy.sh` (normal CI deploys pass these as environment variables directly and never touch this file):
 
    ```bash
    cat <<'EOF' | sudo tee /opt/apps/sitelenz/image.env
@@ -29,9 +29,9 @@ Run once, on the server, before the first CI deploy.
    EOF
    ```
 
-   Replace `<sha>` with the short commit SHA of the image you want running (CI computes and uses `${GITHUB_SHA::7}` as the tag — see `.github/workflows/deploy-production.yml`).
+   Replace `<sha>` with the short commit SHA of the image you want running (CI computes and uses `${GITHUB_SHA::7}` as the tag - see `.github/workflows/deploy-production.yml`).
 
-4. Create the systemd unit at `/etc/systemd/system/sitelenz.service`. This mirrors the `powrth.service` pattern used elsewhere on this server (Compose-managed container, depending on the shared `infra.service` for the `postgres`/`redis`/`alpha` network to already be up) — adjust to match that file exactly if it differs from this:
+4. Create the systemd unit at `/etc/systemd/system/sitelenz.service`. This mirrors the `powrth.service` pattern used elsewhere on this server (Compose-managed container, depending on the shared `infra.service` for the `postgres`/`redis`/`alpha` network to already be up) - adjust to match that file exactly if it differs from this:
 
    ```ini
    [Unit]
@@ -59,17 +59,17 @@ Run once, on the server, before the first CI deploy.
    sudo systemctl enable sitelenz.service
    ```
 
-   The very first `docker compose up` needs an image to actually pull — either run `scripts/deploy.sh` once by hand (see below) before enabling/starting the unit, or let the first CI deploy do it.
+   The very first `docker compose up` needs an image to actually pull - either run `scripts/deploy.sh` once by hand (see below) before enabling/starting the unit, or let the first CI deploy do it.
 
 ## Ongoing deploys
 
 Handled entirely by `.github/workflows/deploy-production.yml` on every push to `main` (or a manual `workflow_dispatch` run):
 
-1. **verify** — `npm ci`, build, typecheck, test
-2. **build-and-push** — multi-platform (`linux/amd64` + `linux/arm64`) build of both the `production` and `migrator` Dockerfile targets, pushed to `ghcr.io/opa1/sitelenz-api:<short-sha>` and `ghcr.io/opa1/sitelenz-migrator:<short-sha>`, then confirms both platforms actually landed in both pushed manifests
-3. **deploy** — syncs `deploy/compose.yml` and `deploy/scripts/` to `/opt/apps/sitelenz/` (never `.env`), then runs `scripts/deploy.sh` over SSH, which:
+1. **verify** - `npm ci`, build, typecheck, test
+2. **build-and-push** - multi-platform (`linux/amd64` + `linux/arm64`) build of both the `production` and `migrator` Dockerfile targets, pushed to `ghcr.io/opa1/sitelenz-api:<short-sha>` and `ghcr.io/opa1/sitelenz-migrator:<short-sha>`, then confirms both platforms actually landed in both pushed manifests
+3. **deploy** - syncs `deploy/compose.yml` and `deploy/scripts/` to `/opt/apps/sitelenz/` (never `.env`), then runs `scripts/deploy.sh` over SSH, which:
    1. logs in to GHCR and pulls both images
-   2. runs `docker run --rm --network alpha --env-file .env <migrator image>` — a one-shot container that runs `prisma migrate deploy` against the shared `postgres` container and exits. If this fails, the deploy stops here: `sitelenz-api` is never touched, so a bad migration can't take down a working API.
+   2. runs `docker run --rm --network alpha --env-file .env <migrator image>` - a one-shot container that runs `prisma migrate deploy` against the shared `postgres` container and exits. If this fails, the deploy stops here: `sitelenz-api` is never touched, so a bad migration can't take down a working API.
    3. only then recreates the `sitelenz-api` container and polls `http://localhost:3002/health` until it responds (or fails the deploy)
 
 ### GitHub secrets required
@@ -79,10 +79,10 @@ Handled entirely by `.github/workflows/deploy-production.yml` on every push to `
 | `SERVER_HOST` | SSH target (`129.213.16.57`) |
 | `SERVER_USER` | SSH user on the OCI VM |
 | `SERVER_KEY` | SSH private key for that user |
-| `GHCR_USER` | GHCR username the *server* uses to `docker pull` (separate from the ephemeral `GITHUB_TOKEN` the Actions runner uses to push — the runner's token doesn't exist anymore by the time the server needs to pull) |
+| `GHCR_USER` | GHCR username the *server* uses to `docker pull` (separate from the ephemeral `GITHUB_TOKEN` the Actions runner uses to push - the runner's token doesn't exist anymore by the time the server needs to pull) |
 | `GHCR_TOKEN` | A GHCR personal access token (`read:packages` is enough) for the same |
 
-`GITHUB_TOKEN` (built-in, no setup needed) is what the `build-and-push` job itself uses to push — it's never sent to the server.
+`GITHUB_TOKEN` (built-in, no setup needed) is what the `build-and-push` job itself uses to push - it's never sent to the server.
 
 ### Manual run / rollback
 

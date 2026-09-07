@@ -23,7 +23,7 @@ const SYSTEM_PROMPT =
   'unknown, you acknowledge the gap rather than inventing a value. Your ' +
   'output must be valid JSON matching the schema provided.';
 
-const RESULT_SCHEMA_COMMENT = `// AiResult JSON schema — return an object matching exactly this shape:
+const RESULT_SCHEMA_COMMENT = `// AiResult JSON schema - return an object matching exactly this shape:
 {
   "summary": string,                 // 2-4 sentence executive summary
   "strengths": string[],             // 3-5 concrete positive observations
@@ -117,7 +117,7 @@ export class GroqProvider implements AIProvider {
     return [
       `Analysis type: ${input.analysisType}`,
       '',
-      'Structured findings, already detected programmatically — interpret them, do not re-derive or contradict them:',
+      'Structured findings, already detected programmatically - interpret them, do not re-derive or contradict them:',
       JSON.stringify(input),
       '',
       'Return only valid JSON with no markdown, no backticks, and no preamble, matching exactly this schema:',

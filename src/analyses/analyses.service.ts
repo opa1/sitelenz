@@ -52,7 +52,7 @@ export class AnalysesService {
       };
     }
 
-    // Admission control, independent of the IP-based rate limit — caps how
+    // Admission control, independent of the IP-based rate limit - caps how
     // much work the pipeline has in flight, regardless of who's asking.
     const runningCount = await this.prisma.analysis.count({
       where: { status: AnalysisStatus.running },
@@ -167,7 +167,7 @@ export class AnalysesService {
     });
 
     // The original job (same jobId) is still sitting in Redis in its failed
-    // state — BullMQ treats add() with an existing jobId as a duplicate and
+    // state - BullMQ treats add() with an existing jobId as a duplicate and
     // silently no-ops rather than re-queuing it, so it must be removed
     // first for the retry to actually run.
     await this.analysisQueue.remove(id);

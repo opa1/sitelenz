@@ -24,7 +24,7 @@ interface X402DiscoveryDocument {
   resources: X402DiscoveryResource[];
 }
 
-// USDC on Algorand has 6 decimal places — the facilitator's discovery schema
+// USDC on Algorand has 6 decimal places - the facilitator's discovery schema
 // wants `amount` in the asset's smallest unit (base units), same convention
 // as the payment protocol itself, not a human-readable dollar figure.
 const USDC_DECIMALS = 6;
@@ -39,7 +39,7 @@ export class WellKnownController {
   // GET /v1/analyses probe route (which relies on a real payment being
   // settled to auto-catalog a resource), this file lets an agent see every
   // paid endpoint and its price up front, with no request required. Must be
-  // a real 200 JSON response at this exact path — the facilitator's crawler
+  // a real 200 JSON response at this exact path - the facilitator's crawler
   // does not accept an SPA fallback.
   @Get('x402')
   x402(@Req() request: FastifyRequest): X402DiscoveryDocument {
@@ -48,7 +48,7 @@ export class WellKnownController {
         ? ALGORAND_MAINNET_NETWORK
         : ALGORAND_TESTNET_NETWORK;
     const networkConfig = this.appConfigService.activeNetworkConfig;
-    // Same absolute-URL construction as X402Guard's resourceInfo.url — relies
+    // Same absolute-URL construction as X402Guard's resourceInfo.url - relies
     // on Fastify's trustProxy (main.ts) to report the real public host.
     const url = `${request.protocol}://${request.host}/v1/analyses`;
 
@@ -59,12 +59,12 @@ export class WellKnownController {
       x402Version: 2,
       name: 'SiteLenz',
       description:
-        'Website intelligence API — automated performance, SEO, and content analysis with a full report.',
+        'Website intelligence API - automated performance, SEO, and content analysis with a full report.',
       resources: [
         {
           url,
           method: 'POST',
-          description: `SiteLenz standard analysis — $${this.appConfigService.priceStandardUsd}. Body: {"url": "...", "analysis": "standard"}`,
+          description: `SiteLenz standard analysis - $${this.appConfigService.priceStandardUsd}. Body: {"url": "...", "analysis": "standard"}`,
           network,
           asset: networkConfig.usdcAssetId,
           amount: toAmount(this.appConfigService.priceStandardUsd),
@@ -73,7 +73,7 @@ export class WellKnownController {
         {
           url,
           method: 'POST',
-          description: `SiteLenz deep analysis — $${this.appConfigService.priceDeepUsd}. Body: {"url": "...", "analysis": "deep"}`,
+          description: `SiteLenz deep analysis - $${this.appConfigService.priceDeepUsd}. Body: {"url": "...", "analysis": "deep"}`,
           network,
           asset: networkConfig.usdcAssetId,
           amount: toAmount(this.appConfigService.priceDeepUsd),
