@@ -1,15 +1,12 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
-import { AnalyzeJobStatus, type Prisma } from '@prisma/client';
+import { AnalyzeJobStatus } from '@prisma/client';
 import type { FastifyRequest } from 'fastify';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { UrlValidatorService } from '../common/utils/url-validator.service';
-import { normalizeUrl } from '../common/utils/normalize-url.util';
-import { sanitizeForJsonb } from '../common/utils/json-sanitize.util';
 import { InvalidUrlException } from '../common/exceptions/invalid-url.exception';
 import { AnalysisNotFailedException } from '../common/exceptions/analysis-not-failed.exception';
-import { InsufficientFindingsException } from '../common/exceptions/insufficient-findings.exception';
 import { generateAnalyzeJobId } from '../common/utils/id';
 import {
   ANALYZE_AI_SUMMARY_JOB_NAME,
@@ -44,8 +41,6 @@ export interface CreateAnalyzeJobParams {
   webhookUrl?: string;
   endpoint: AnalyzeEndpoint;
   req: FastifyRequest;
-  /** ai-summary only - see AnalyzeJobData.findings. */
-  findings?: Record<string, unknown>;
 }
 
 export type AnalyzeResultOutcome =
@@ -113,31 +108,11 @@ export class BaseAnalyzeController {
   async createJob(
     params: CreateAnalyzeJobParams,
   ): Promise<AnalyzeJobCreatedResponseDto> {
-    const isAiSummary = params.endpoint === 'ai-summary';
-
-    if (isAiSummary && Object.keys(params.findings ?? {}).length === 0) {
-      throw new InsufficientFindingsException();
+    const validation = await this.urlValidator.validate(params.url);
+    if (!validation.valid) {
+      throw new InvalidUrlException(validation.reason);
     }
-
-    // ai-summary never crawls the URL - it's descriptive metadata about
-    // what the findings are for, so only normalize the string form rather
-    // than running it through UrlValidatorService's SSRF/DNS-resolution
-    // check (which would be pointless network work for a URL nothing ever
-    // fetches).
-    let normalizedUrl: string;
-    if (isAiSummary) {
-      try {
-        normalizedUrl = normalizeUrl(params.url);
-      } catch {
-        throw new InvalidUrlException('Malformed URL');
-      }
-    } else {
-      const validation = await this.urlValidator.validate(params.url);
-      if (!validation.valid) {
-        throw new InvalidUrlException(validation.reason);
-      }
-      normalizedUrl = validation.normalizedUrl;
-    }
+    const normalizedUrl = validation.normalizedUrl;
 
     const analyzeJobId = generateAnalyzeJobId();
     const job = await this.prisma.analyzeJob.create({
@@ -149,11 +124,6 @@ export class BaseAnalyzeController {
         status: AnalyzeJobStatus.queued,
         progressStage: 'queued',
         webhookUrl: params.webhookUrl ?? null,
-        // Client-supplied JSON (ai-summary) - same jsonb NUL/lone-surrogate
-        // rejection risk as any other Json column, see crawl-cache.service.ts.
-        findings: params.findings
-          ? (sanitizeForJsonb(params.findings) as Prisma.InputJsonValue)
-          : undefined,
       },
     });
 
@@ -162,7 +132,6 @@ export class BaseAnalyzeController {
       endpoint: params.endpoint,
       url: normalizedUrl,
       normalizedUrl,
-      ...(params.findings ? { findings: params.findings } : {}),
     };
     await this.queues[params.endpoint].add(
       JOB_NAME_BY_ENDPOINT[params.endpoint],
@@ -250,11 +219,6 @@ export class BaseAnalyzeController {
         endpoint,
         url: updated.url,
         normalizedUrl: updated.normalizedUrl,
-        // Only ai-summary jobs ever have findings persisted; undefined for
-        // every other endpoint, so this is a no-op for them.
-        ...(updated.findings
-          ? { findings: updated.findings as Record<string, unknown> }
-          : {}),
       },
       { jobId: id },
     );

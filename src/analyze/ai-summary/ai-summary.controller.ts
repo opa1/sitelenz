@@ -23,11 +23,11 @@ import { SkipThrottle, Throttle } from '@nestjs/throttler';
 import { X402Guard } from '../../x402/x402.guard';
 import { SetAnalyzePrice } from '../../x402/analyze-price.decorator';
 import { BaseAnalyzeController } from '../base-analyze.controller';
+import { CreateAnalyzeJobDto } from '../dto/create-analyze-job.dto';
 import { AnalyzeJobCreatedResponseDto } from '../dto/analyze-job-created-response.dto';
 import { AnalyzeJobStatusResponseDto } from '../dto/analyze-job-status-response.dto';
 import { AnalyzeResultPendingResponseDto } from '../dto/analyze-result-pending-response.dto';
 import { RetryAnalyzeJobResponseDto } from '../dto/retry-analyze-job-response.dto';
-import { CreateAiSummaryJobDto } from './create-ai-summary-job.dto';
 
 const ENDPOINT = 'ai-summary' as const;
 
@@ -44,11 +44,11 @@ export class AiSummaryController {
   @UseGuards(X402Guard)
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
-    summary: 'Interpret pre-analyzed findings with AI',
+    summary: "Get an AI-generated summary of a website's analysis",
     description:
-      'Queues an AI-interpretation job over client-supplied analyzer findings - no crawl happens, so this never touches a URL. Returns an executive summary, strengths, weaknesses, notable findings, and prioritized recommendations. Requires an x402 payment of $0.05, enforced via the PAYMENT-SIGNATURE header.',
+      'Crawls the URL, runs all six analyzers, and returns an AI-generated summary with strengths, weaknesses, notable findings, and recommendations. Requires an x402 payment of $0.05, enforced via the PAYMENT-SIGNATURE header.',
   })
-  @ApiBody({ type: CreateAiSummaryJobDto })
+  @ApiBody({ type: CreateAnalyzeJobDto })
   @ApiResponse({
     status: 200,
     description: 'Analyze job queued',
@@ -56,15 +56,8 @@ export class AiSummaryController {
   })
   @ApiResponse({
     status: 400,
-    description: 'Request body failed validation, or findings had no keys at all',
-    schema: {
-      example: {
-        error: {
-          code: 'INSUFFICIENT_FINDINGS',
-          message: 'At least one findings key is required',
-        },
-      },
-    },
+    description: 'Request body failed validation, or the URL is invalid/unsafe',
+    schema: { example: { error: { code: 'INVALID_URL', message: 'Malformed URL' } } },
   })
   @ApiResponse({
     status: 402,
@@ -102,14 +95,13 @@ export class AiSummaryController {
     },
   })
   async create(
-    @Body() dto: CreateAiSummaryJobDto,
+    @Body() dto: CreateAnalyzeJobDto,
     @Req() req: FastifyRequest,
   ): Promise<AnalyzeJobCreatedResponseDto> {
     return this.baseAnalyzeController.createJob({
       url: dto.url,
       webhookUrl: dto.webhookUrl,
       endpoint: ENDPOINT,
-      findings: dto.findings,
       req,
     });
   }
@@ -181,7 +173,7 @@ export class AiSummaryController {
   @ApiOperation({
     summary: 'Retry a failed ai-summary analyze job',
     description:
-      'Re-queues a previously failed job with the same findings. No x402 payment is required. Only jobs currently in the "failed" state can be retried.',
+      'Re-queues a previously failed job for the same URL. No x402 payment is required. Only jobs currently in the "failed" state can be retried.',
   })
   @ApiParam({ name: 'id', example: 'sl_aj_01j8z9k3n8v5w6x7y8z9a0b1c2' })
   @ApiResponse({ status: 200, description: 'Job reset and re-queued', type: RetryAnalyzeJobResponseDto })

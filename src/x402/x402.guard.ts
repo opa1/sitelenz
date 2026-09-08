@@ -118,8 +118,7 @@ export class X402Guard implements CanActivate {
     // (POST's body/response shape) regardless of which method fetched the
     // challenge. Every /v1/analyze/* route shares the same generic
     // {url, webhookUrl?} -> {analyzeJobId, status, endpoint, createdAt}
-    // shape (ai-summary's extra `findings` field is documented on its own
-    // route in Swagger, not here).
+    // shape, ai-summary included - it crawls a URL like every other endpoint.
     const bazaarExtension = {
       bazaar: {
         info: {

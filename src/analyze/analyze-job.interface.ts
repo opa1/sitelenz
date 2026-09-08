@@ -15,11 +15,4 @@ export interface AnalyzeJobData {
   endpoint: AnalyzeEndpoint;
   url: string;
   normalizedUrl: string;
-  /**
-   * ai-summary only - the client-supplied analyzer findings it should
-   * interpret. Persisted on AnalyzeJob.findings (not just carried on the
-   * BullMQ job payload) so a retry, which reads the job back from Postgres,
-   * has it too.
-   */
-  findings?: Record<string, unknown>;
 }

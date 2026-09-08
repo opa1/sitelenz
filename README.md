@@ -1,6 +1,6 @@
 # SiteLenz
 
-SiteLenz is a pay-per-request Website Intelligence API. Ten `/v1/analyze/*` endpoints each accept a URL (or, for `ai-summary`, pre-analyzed findings) behind a single x402 micropayment on Algorand, then asynchronously analyze the target and return structured JSON - individually (technology, SEO, security, business, performance, UX/accessibility, screenshots, AI summary) or as a composite report (`standard`, `full`) covering technology stack, SEO, security headers, performance metrics, business signals, UX observations, and an AI-generated interpretation via Groq - delivered through a webhook or retrievable by polling.
+SiteLenz is a pay-per-request Website Intelligence API. Ten `/v1/analyze/*` endpoints each accept a URL behind a single x402 micropayment on Algorand, then asynchronously crawl and analyze the target and return structured JSON - individually (technology, SEO, security, business, performance, UX/accessibility, screenshots, AI summary) or as a composite report (`standard`, `full`) covering technology stack, SEO, security headers, performance metrics, business signals, UX observations, and an AI-generated interpretation via Groq - delivered through a webhook or retrievable by polling.
 
 Built for the [Algorand Global x402 Challenge](https://algorand.co/global-x402-challenge).
 
@@ -9,15 +9,15 @@ Built for the [Algorand Global x402 Challenge](https://algorand.co/global-x402-c
 ## How It Works
 
 1. A client discovers what's available via `GET /v1/analyze` (or `GET /.well-known/x402` for the x402 Bazaar manifest) - both list all ten endpoints with their current price and description.
-2. The client sends `POST /v1/analyze/{endpoint}` with `{ url, webhookUrl? }` (or `{ findings, url, webhookUrl? }` for `ai-summary`, which never crawls).
+2. The client sends `POST /v1/analyze/{endpoint}` with `{ url, webhookUrl? }` - the same shape for all ten endpoints.
 3. For a URL-crawling endpoint, the URL is validated first - protocol allowlist, DNS resolution, and rejection of private/reserved/loopback addresses (SSRF protection) - before any payment is enforced, so an invalid or unsafe URL never charges the caller.
 4. The request must carry a `PAYMENT-SIGNATURE` header. If it is missing or invalid, the API responds `402 Payment Required` with the x402 payment requirements: an Algorand `exact`-scheme USDC transfer, priced per endpoint (`GET /v1/analyze/{endpoint}` returns the same 402 challenge with no side effects, for the x402 Doctor / Bazaar crawler to probe).
 5. The client signs the required USDC transfer (via any x402-compatible Algorand client, such as `@x402/core` + `@x402/avm`) and retries the same request with the `PAYMENT-SIGNATURE` header attached.
 6. The x402 guard verifies and settles the payment against the GoPlausible facilitator. Once settled, a job is enqueued on that endpoint's own BullMQ queue under a generated `sl_aj_*` analyze-job id, and the request returns `200` immediately with `status: "queued"`.
-7. Before doing any work, the worker checks the crawl cache (`CrawlObservation`, keyed by normalized URL + crawl type, TTL-bound): lightweight endpoints (technology/seo/security/business) accept either a cached `lightweight` (plain HTTP fetch) or `full` (Playwright) observation; heavy endpoints (performance/ux-accessibility/screenshots/standard/full) require a `full` one. A prior heavy-endpoint crawl of the same URL therefore speeds up a subsequent lightweight call on it too, and repeat heavy/composite calls within the TTL skip re-launching a browser session entirely.
+7. Before doing any work, the worker checks the crawl cache (`CrawlObservation`, keyed by normalized URL + crawl type, TTL-bound): lightweight endpoints (technology/seo/security/business) accept either a cached `lightweight` (plain HTTP fetch) or `full` (Playwright) observation; heavy endpoints (performance/ux-accessibility/screenshots/ai-summary/standard/full) require a `full` one. A prior heavy-endpoint crawl of the same URL therefore speeds up a subsequent lightweight call on it too, and repeat heavy/composite calls within the TTL skip re-launching a browser session entirely.
 8. On a cache miss, a lightweight job does a plain HTTP fetch + Cheerio parse (no browser); a heavy job launches a shared Playwright browser context, runs a Lighthouse audit, and (for `screenshots`/`standard`/`full`) captures and uploads a desktop screenshot (plus a mobile screenshot for `screenshots`/`full`) to Cloudinary.
-9. Individual endpoints run their one analyzer over the observations; `standard`/`full` run all six (Technology, SEO, Security, Performance, Business, UX) in sequence, `full` in deep mode.
-10. `standard`, `full`, and `ai-summary` send the condensed analyzer output (or, for `ai-summary`, the client-supplied findings) to Groq for AI interpretation (summary, strengths/weaknesses, notable findings, recommendations). If the AI call fails, a fallback stub is stored instead of failing the whole job.
+9. Individual endpoints run their one analyzer over the observations; `ai-summary`/`standard`/`full` run all six (Technology, SEO, Security, Performance, Business, UX) in sequence, `full` in deep mode.
+10. `ai-summary`, `standard`, and `full` send the condensed analyzer output to Groq for AI interpretation (summary, strengths/weaknesses, notable findings, recommendations) - `ai-summary` returns just that interpretation, `standard`/`full` bundle it alongside the full analyzer output. If the AI call fails, a fallback stub is stored instead of failing the whole job.
 11. The result is persisted on the job and its status flips to `completed`. If a `webhookUrl` was supplied, an HMAC-signed webhook is enqueued for delivery (with automatic retries); regardless, the result becomes retrievable via `GET /v1/analyze/{endpoint}/:id/result`. A `failed` job can be re-queued via `POST /v1/analyze/{endpoint}/:id/retry`.
 
 ---
@@ -33,7 +33,7 @@ Built for the [Algorand Global x402 Challenge](https://algorand.co/global-x402-c
 | `performance` | $0.02 | heavy (Playwright + Lighthouse) | Core Web Vitals (LCP, CLS, FCP, TBT, TTFB), page weight, resource inventory, third-party domain analysis |
 | `ux-accessibility` | $0.01 | heavy | Viewport config, navigation, forms, CTA presence, content/hero detection, mobile UX, reading experience, Lighthouse accessibility audit |
 | `screenshots` | $0.01 | heavy | Desktop (1280x720) + mobile (390x844) viewport screenshots, uploaded to Cloudinary |
-| `ai-summary` | $0.05 | none (findings-only) | AI-generated summary/strengths/weaknesses/recommendations over client-supplied analyzer findings - never crawls a URL |
+| `ai-summary` | $0.05 | heavy, all 6 analyzers | Crawls the URL, runs all six analyzers internally, and returns just the AI-generated summary/strengths/weaknesses/recommendations (not the analyzer sections themselves) |
 | `standard` | $0.40 | heavy, all 6 analyzers | Full report: all six analyzers (non-deep), a desktop screenshot, and an AI interpretation |
 | `full` | $0.80 | heavy, all 6 analyzers (deep) | Everything in `standard`, plus deep-mode signals on every analyzer (JS dependency tree, robots.txt/sitemap/hreflang, TLS/cookie audit, resource inventory/third-party analysis, nav/footer/pricing extraction), a mobile screenshot, and an expanded AI interpretation |
 
@@ -45,7 +45,7 @@ Prices are set via env vars (see [Environment Variables](#environment-variables)
 
 Every `/v1/analyze/{endpoint}` route (all ten) follows the same four-route pattern:
 
-- **`POST /v1/analyze/{endpoint}`** - queues a job. Requires x402 payment. Body: `{ "url": "https://example.com", "webhookUrl": "https://myapp.com/webhooks/sitelenz" }` (`webhookUrl` optional; `ai-summary` additionally requires `findings`, see below).
+- **`POST /v1/analyze/{endpoint}`** - queues a job. Requires x402 payment. Body: `{ "url": "https://example.com", "webhookUrl": "https://myapp.com/webhooks/sitelenz" }` (`webhookUrl` optional) - identical for all ten endpoints.
 - **`GET /v1/analyze/{endpoint}`** - same x402 402 challenge as the `POST`, no side effects. Exists for the x402 Doctor / Bazaar discovery crawler, which always probes with `GET`.
 - **`GET /v1/analyze/{endpoint}/:id`** - job status/progress. No payment required.
 - **`GET /v1/analyze/{endpoint}/:id/result`** - the stored result once `status` is `completed`; `202` with a pending message otherwise. No payment required.
@@ -107,23 +107,6 @@ curl -i -X POST https://api.sitelenz.online/v1/analyze/technology \
   -H "PAYMENT-SIGNATURE: <base64-encoded signed payment payload>" \
   -d '{"url":"https://example.com"}'
 ```
-
-### POST /v1/analyze/ai-summary
-
-The one endpoint that doesn't crawl. Body:
-
-```json
-{
-  "url": "https://example.com",
-  "findings": {
-    "seo": { "title": { "present": true, "length": 15 }, "lighthouseSeoScore": 88 },
-    "security": { "securityScore": 45, "https": { "enabled": true } }
-  },
-  "webhookUrl": "https://myapp.com/webhooks/sitelenz"
-}
-```
-
-`findings` is freeform - any subset of `technology`/`seo`/`security`/`performance`/`business`/`ux` analyzer output. At least one key is required, or the request fails `400 INSUFFICIENT_FINDINGS`. `url` is structurally validated but never fetched, so this is the one endpoint where an unreachable or private-IP URL doesn't matter.
 
 ### GET /v1/analyze/{endpoint}/:id
 
@@ -283,12 +266,12 @@ Each single-analyzer endpoint (`technology`, `seo`, `security`, `business`, `per
 }
 ```
 
-`ai-summary` returns:
+`ai-summary` crawls and analyzes the URL internally like `standard`/`full`, but returns only the AI section (not the six analyzer sections):
 
 ```json
 {
-  "url": "https://example.com/",
-  "aiResult": {
+  "url": "https://example.com",
+  "ai": {
     "summary": "...",
     "strengths": ["..."],
     "weaknesses": ["..."],
@@ -299,7 +282,11 @@ Each single-analyzer endpoint (`technology`, `seo`, `security`, `business`, `per
     "modelUsed": "openai/gpt-oss-120b",
     "interpretedAt": "2026-09-08T12:00:42.000Z"
   },
-  "interpretedAt": "2026-09-08T12:00:42.000Z"
+  "metadata": {
+    "completedAt": "2026-09-08T12:00:45.000Z",
+    "durationMs": 18234,
+    "cacheHit": false
+  }
 }
 ```
 

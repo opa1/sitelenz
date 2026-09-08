@@ -58,7 +58,7 @@ export const ANALYZE_ENDPOINT_CATALOG: AnalyzeEndpointCatalogEntry[] = [
   {
     name: 'ai-summary',
     description:
-      'Accepts structured website analyzer findings and returns an AI-generated executive summary, strengths, weaknesses, notable findings, and prioritized recommendations.',
+      'Crawls the URL, runs all six analyzers, and returns an AI-generated summary with strengths, weaknesses, notable findings, and recommendations.',
   },
   {
     name: 'standard',

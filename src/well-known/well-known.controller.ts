@@ -32,13 +32,8 @@ interface X402DiscoveryDocument {
 // as the payment protocol itself, not a human-readable dollar figure.
 const USDC_DECIMALS = 6;
 
-// The client body shape differs only for ai-summary (findings, not just a
-// url to crawl) - everything else takes {"url": "..."}.
-function bodyHintFor(name: string): string {
-  return name === 'ai-summary'
-    ? '{"url": "...", "findings": {"seo": {...}, "security": {...}}}'
-    : '{"url": "..."}';
-}
+// Every /v1/analyze/* endpoint takes the same request body shape.
+const BODY_HINT = '{"url": "..."}';
 
 @SkipThrottle({ 'analysis-create': true })
 @Controller('.well-known')
@@ -73,7 +68,7 @@ export class WellKnownController {
         ({ name, description, price }) => ({
           url: `${origin}/v1/analyze/${name}`,
           method: 'POST' as const,
-          description: `${description} $${price}. Body: ${bodyHintFor(name)}`,
+          description: `${description} $${price}. Body: ${BODY_HINT}`,
           network,
           asset: networkConfig.usdcAssetId,
           amount: toAmount(price),
