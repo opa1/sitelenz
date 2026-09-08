@@ -3,6 +3,7 @@ import { CrawlType, type CrawlObservation, type Prisma } from '@prisma/client';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { AppConfigService } from '../config';
 import { generateCrawlObservationId } from '../common/utils/id';
+import { sanitizeForJsonb } from '../common/utils/json-sanitize.util';
 
 export interface StoreCrawlObservationParams {
   url: string;
@@ -55,7 +56,11 @@ export class CrawlCacheService {
         id: generateCrawlObservationId(),
         url: params.url,
         normalizedUrl: params.normalizedUrl,
-        rawObservations: params.rawObservations,
+        // rawObservations is derived from fetched HTML/text - Postgres's
+        // jsonb rejects embedded NUL bytes and lone UTF-16 surrogates
+        // outright (22P05 "unsupported Unicode escape sequence"), both of
+        // which real-world pages can produce.
+        rawObservations: sanitizeForJsonb(params.rawObservations),
         crawlType: params.crawlType,
         createdAt,
         expiresAt,

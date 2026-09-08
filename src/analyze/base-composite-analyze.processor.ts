@@ -90,8 +90,20 @@ export abstract class BaseCompositeAnalyzeProcessor extends BaseHeavyAnalyzeProc
       stage = 'taking_screenshots';
       await this.updateStage(analyzeJobId, stage);
 
-      let desktopEntry: ScreenshotEntry | undefined;
-      let mobileEntry: ScreenshotEntry | undefined;
+      // Fault-tolerant like the standalone screenshots endpoint: a capture
+      // timing out (real sites with continuous animations/video backgrounds
+      // can hang Playwright's screenshot stability wait - see
+      // captureScreenshot's `animations: 'disabled'` below) shouldn't
+      // discard an already-completed crawl and, later, all six analyzers.
+      let desktopEntry: ScreenshotEntry | null = null;
+      let mobileEntry: ScreenshotEntry | null = null;
+
+      const onScreenshotError = (type: 'desktop' | 'mobile') => (error: Error) => {
+        this.logger.error(
+          `${type === 'desktop' ? 'Desktop' : 'Mobile'} screenshot failed for analyze job ${analyzeJobId}: ${error.message}`,
+        );
+        return null;
+      };
 
       if (!resolved.cacheHit && resolved.context && resolved.releaseContext) {
         try {
@@ -100,13 +112,13 @@ export abstract class BaseCompositeAnalyzeProcessor extends BaseHeavyAnalyzeProc
             observations.url,
             analyzeJobId,
             'desktop',
-          );
+          ).catch(onScreenshotError('desktop'));
           if (includeMobile) {
             mobileEntry = await this.withGatedContext(
               () => this.browserService.acquireMobileContext(),
               (context) =>
                 this.captureScreenshot(context, observations.url, analyzeJobId, 'mobile'),
-            );
+            ).catch(onScreenshotError('mobile'));
           }
         } finally {
           await resolved.releaseContext();
@@ -118,13 +130,13 @@ export abstract class BaseCompositeAnalyzeProcessor extends BaseHeavyAnalyzeProc
           () => this.browserService.acquireContext(),
           (context) =>
             this.captureScreenshot(context, observations.url, analyzeJobId, 'desktop'),
-        );
+        ).catch(onScreenshotError('desktop'));
         if (includeMobile) {
           mobileEntry = await this.withGatedContext(
             () => this.browserService.acquireMobileContext(),
             (context) =>
               this.captureScreenshot(context, observations.url, analyzeJobId, 'mobile'),
-          );
+          ).catch(onScreenshotError('mobile'));
         }
       }
 
@@ -186,8 +198,8 @@ export abstract class BaseCompositeAnalyzeProcessor extends BaseHeavyAnalyzeProc
         ux: uxResult,
         ai: aiResult,
         screenshots: includeMobile
-          ? { desktop: desktopEntry!, mobile: mobileEntry! }
-          : { desktop: desktopEntry! },
+          ? { desktop: desktopEntry, mobile: mobileEntry }
+          : { desktop: desktopEntry },
         metadata: {
           completedAt: new Date().toISOString(),
           durationMs: Date.now() - startedAt,
@@ -272,7 +284,18 @@ export abstract class BaseCompositeAnalyzeProcessor extends BaseHeavyAnalyzeProc
         );
       }
 
-      const buffer = await page.screenshot({ fullPage: false, type: 'png' });
+      // animations: 'disabled' freezes CSS animations/transitions before
+      // capture - Playwright's screenshot always waits for the page to
+      // reach a visually "stable" frame first, regardless of this option,
+      // and that wait never converges on a page with continuously-running
+      // animations/video backgrounds (observed live: a 120s screenshot
+      // timeout on stripe.com, well past "fonts loaded"). Freezing
+      // animations first lets the stability check succeed immediately.
+      const buffer = await page.screenshot({
+        fullPage: false,
+        type: 'png',
+        animations: 'disabled',
+      });
       const uploaded = await this.cloudinaryService.uploadScreenshot(
         buffer,
         analyzeJobId,

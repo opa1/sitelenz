@@ -6,6 +6,7 @@ import type { FastifyRequest } from 'fastify';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { UrlValidatorService } from '../common/utils/url-validator.service';
 import { normalizeUrl } from '../common/utils/normalize-url.util';
+import { sanitizeForJsonb } from '../common/utils/json-sanitize.util';
 import { InvalidUrlException } from '../common/exceptions/invalid-url.exception';
 import { AnalysisNotFailedException } from '../common/exceptions/analysis-not-failed.exception';
 import { InsufficientFindingsException } from '../common/exceptions/insufficient-findings.exception';
@@ -148,8 +149,10 @@ export class BaseAnalyzeController {
         status: AnalyzeJobStatus.queued,
         progressStage: 'queued',
         webhookUrl: params.webhookUrl ?? null,
+        // Client-supplied JSON (ai-summary) - same jsonb NUL/lone-surrogate
+        // rejection risk as any other Json column, see crawl-cache.service.ts.
         findings: params.findings
-          ? (params.findings as Prisma.InputJsonValue)
+          ? (sanitizeForJsonb(params.findings) as Prisma.InputJsonValue)
           : undefined,
       },
     });

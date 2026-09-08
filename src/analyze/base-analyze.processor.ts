@@ -4,6 +4,7 @@ import { AnalyzeJobStatus, CrawlType, type Prisma } from '@prisma/client';
 import { PrismaService } from '../common/prisma/prisma.service';
 import type { RawObservations } from '../common/browser/raw-observations.interface';
 import { normalizeUrl } from '../common/utils/normalize-url.util';
+import { sanitizeForJsonb } from '../common/utils/json-sanitize.util';
 import { CrawlCacheService } from './crawl-cache.service';
 import { LightweightFetchService } from './lightweight-fetch.service';
 import type { LightweightObservations } from './lightweight-observations.interface';
@@ -112,7 +113,10 @@ export abstract class BaseAnalyzeProcessor extends WorkerHost {
         status: AnalyzeJobStatus.completed,
         progressStage: 'completed',
         completedAt: new Date(),
-        result: result as Prisma.InputJsonValue,
+        // Analyzer output is ultimately derived from fetched HTML/text (e.g.
+        // evidence strings, meta tag content) - same jsonb NUL/lone-surrogate
+        // rejection risk as rawObservations, see crawl-cache.service.ts.
+        result: sanitizeForJsonb(result) as Prisma.InputJsonValue,
       },
     });
   }

@@ -217,8 +217,18 @@ export class ScreenshotsProcessor extends BaseHeavyAnalyzeProcessor {
         );
       }
 
-      // Viewport-only, not the full scrolled page.
-      const buffer = await page.screenshot({ fullPage: false, type: 'png' });
+      // Viewport-only, not the full scrolled page. animations: 'disabled'
+      // freezes CSS animations/transitions before capture - Playwright's
+      // screenshot always waits for a visually "stable" frame first
+      // regardless of this option, and that wait never converges on a page
+      // with continuously-running animations/video backgrounds (observed
+      // live: a 120s timeout on stripe.com). Freezing animations first lets
+      // the stability check succeed immediately.
+      const buffer = await page.screenshot({
+        fullPage: false,
+        type: 'png',
+        animations: 'disabled',
+      });
       const uploaded = await this.cloudinaryService.uploadScreenshot(
         buffer,
         analyzeJobId,

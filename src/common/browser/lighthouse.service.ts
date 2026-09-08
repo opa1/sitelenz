@@ -21,9 +21,31 @@ const LIGHTHOUSE_CATEGORIES = [
 export class LighthouseService {
   private readonly logger = new Logger(LighthouseService.name);
 
+  /**
+   * Lighthouse tracks its own run via process-global performance marks
+   * (`performance.mark`/`measure`) and is not safe to invoke concurrently
+   * within one Node process - two overlapping runs corrupt each other's
+   * marks (observed live: "The 'start lh:runner:gather' performance mark
+   * has not been set" when two heavy analyze jobs' crawls overlapped).
+   * HeavyAnalyzeConcurrencyGate deliberately allows several browser contexts
+   * to run at once (up to MAX_CONCURRENT_ANALYSES), so Lighthouse calls need
+   * their own, stricter serialization on top of that - this promise chain is
+   * a simple app-wide mutex: each call awaits the previous one before
+   * starting.
+   */
+  private queue: Promise<unknown> = Promise.resolve();
+
   constructor(private readonly browserService: BrowserService) {}
 
-  async run(url: string): Promise<LighthouseResult | null> {
+  run(url: string): Promise<LighthouseResult | null> {
+    const result = this.queue.then(() => this.runNow(url));
+    // Chained via .catch so one failed/rejected run doesn't leave the queue
+    // permanently rejected for every run queued after it.
+    this.queue = result.catch(() => undefined);
+    return result;
+  }
+
+  private async runNow(url: string): Promise<LighthouseResult | null> {
     try {
       const { default: lighthouse } = await import('lighthouse');
       const runnerResult = await lighthouse(url, {
