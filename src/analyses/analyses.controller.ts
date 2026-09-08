@@ -1,235 +1,32 @@
-import {
-  Body,
-  Controller,
-  Get,
-  HttpCode,
-  HttpStatus,
-  NotFoundException,
-  Param,
-  Post,
-  Res,
-  UseGuards,
-  UseInterceptors,
-} from '@nestjs/common';
-import {
-  ApiBody,
-  ApiOperation,
-  ApiParam,
-  ApiResponse,
-  ApiTags,
-} from '@nestjs/swagger';
-import type { FastifyReply } from 'fastify';
-import { SkipThrottle, Throttle } from '@nestjs/throttler';
-import { X402Guard } from '../x402/x402.guard';
-import { UrlValidationInterceptor } from './interceptors/url-validation.interceptor';
-import { AnalysesService } from './analyses.service';
-import { CreateAnalysisDto } from './dto/create-analysis.dto';
-import { CreateAnalysisResponseDto } from './dto/create-analysis-response.dto';
-import { AnalysisStatusResponseDto } from './dto/analysis-status-response.dto';
-import { AnalysisReportPendingResponseDto } from './dto/analysis-report-pending-response.dto';
-import { RetryAnalysisResponseDto } from './dto/retry-analysis-response.dto';
+import { All, Controller, HttpCode } from '@nestjs/common';
+import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 
-// The stricter 'analysis-create' tier only makes sense on POST - skip it
-// here at the class level and re-enable + configure it on just that route
-// below. Every route here (including this class-level default) still gets
-// the 'global' 200/min tier from the app-wide guard.
-@SkipThrottle({ 'analysis-create': true })
 @ApiTags('analyses')
 @Controller('v1/analyses')
 export class AnalysesController {
-  constructor(private readonly analysesService: AnalysesService) {}
-
-  @Post()
-  @SkipThrottle({ 'analysis-create': false })
-  @Throttle({ 'analysis-create': { limit: 10, ttl: 60_000 } })
-  @UseInterceptors(UrlValidationInterceptor)
-  @HttpCode(HttpStatus.OK)
+  @All(['/', '*'])
+  @HttpCode(301)
   @ApiOperation({
-    summary: 'Create a website analysis',
-    description:
-      'Queues a new analysis job. The URL is validated (SSRF-checked) before payment is enforced, so an invalid URL never charges the caller. Requires an x402 payment: $1 for a standard analysis, $2 for a deep analysis, enforced via the PAYMENT-SIGNATURE header. If a completed analysis for the same URL and type exists within the cache TTL, returns it immediately instead of queuing a new job.',
-  })
-  @ApiBody({ type: CreateAnalysisDto })
-  @ApiResponse({
-    status: 200,
-    description: 'Analysis queued (or a cached result was returned)',
-    type: CreateAnalysisResponseDto,
+    summary: 'Moved permanently',
+    description: '/v1/analyses/* has moved permanently to /v1/analyze/*',
+    deprecated: true,
   })
   @ApiResponse({
-    status: 400,
-    description: 'Request body failed validation, or the URL is invalid/unsafe',
+    status: 301,
+    description: 'This API has permanently moved to /v1/analyze/*',
     schema: {
       example: {
-        error: { code: 'INVALID_URL', message: 'Malformed URL' },
+        statusCode: 301,
+        message: 'This API has permanently moved to /v1/analyze/*',
+        documentation: '/docs',
       },
     },
   })
-  @ApiResponse({
-    status: 402,
-    description: 'Payment required - raw x402 PaymentRequired body',
-    schema: {
-      example: {
-        x402Version: 2,
-        error: 'Payment required',
-        resource: {
-          url: '/v1/analyses',
-          description: 'SiteLenz standard analysis',
-          mimeType: 'application/json',
-        },
-        accepts: [
-          {
-            scheme: 'exact',
-            network: 'algorand:SGO1GKSzyE7IEPItTxCByw9x8FmnrCDe',
-            asset: '10458941',
-            amount: '1000000',
-            payTo: 'RECEIVER_ALGORAND_ADDRESS',
-            maxTimeoutSeconds: 60,
-            extra: {},
-          },
-        ],
-      },
-    },
-  })
-  @ApiResponse({
-    status: 429,
-    description:
-      'Rate limited (10/min per IP on this endpoint, or 200/min per IP globally), or MAX_CONCURRENT_ANALYSES capacity is currently full',
-    schema: {
-      example: {
-        error: {
-          code: 'RATE_LIMITED',
-          message: 'Too many requests. Please slow down.',
-        },
-      },
-    },
-  })
-  async create(
-    @Body() dto: CreateAnalysisDto,
-  ): Promise<CreateAnalysisResponseDto> {
-    return this.analysesService.createAnalysis(dto);
-  }
-
-  // x402 Bazaar discovery: the x402 Doctor probes resources with a plain GET
-  // to catalog them. The real endpoint is POST-only, so without this route
-  // the doctor gets a 404 and can never see our 402 challenge. X402Guard
-  // runs as a normal @UseGuards() here (no URL-validation ordering trick
-  // needed - this route never queues anything), fires before the handler,
-  // and returns 402 on every unpaid request. The handler itself is dead code.
-  @Get()
-  @UseGuards(X402Guard)
-  discover(): never {
-    throw new NotFoundException();
-  }
-
-  @Get(':id')
-  @ApiOperation({ summary: 'Get analysis status and progress' })
-  @ApiParam({ name: 'id', example: 'sl_an_01j8z9k3n8v5w6x7y8z9a0b1c2' })
-  @ApiResponse({
-    status: 200,
-    description: 'Analysis found',
-    type: AnalysisStatusResponseDto,
-  })
-  @ApiResponse({
-    status: 404,
-    description: 'No analysis exists with this id',
-    schema: {
-      example: {
-        error: { code: 'NOT_FOUND', message: 'Analysis "sl_an_xxx" not found' },
-      },
-    },
-  })
-  async getStatus(@Param('id') id: string): Promise<AnalysisStatusResponseDto> {
-    return this.analysesService.getAnalysisStatus(id);
-  }
-
-  @Get(':id/report')
-  @ApiOperation({
-    summary: 'Get the full analysis report',
-    description:
-      'Returns the stored report once the analysis has completed. No x402 payment is required here - the analysis was already paid for when it was created. While the analysis is still queued/running, or if it failed, responds 202 with a status/message body instead of the report.',
-  })
-  @ApiParam({ name: 'id', example: 'sl_an_01j8z9k3n8v5w6x7y8z9a0b1c2' })
-  @ApiResponse({
-    status: 200,
-    description: 'Analysis completed - full stored report JSON',
-    schema: { type: 'object' },
-  })
-  @ApiResponse({
-    status: 202,
-    description: 'Analysis has not completed yet (or it failed)',
-    type: AnalysisReportPendingResponseDto,
-  })
-  @ApiResponse({
-    status: 404,
-    description: 'No analysis exists with this id',
-    schema: {
-      example: {
-        error: { code: 'NOT_FOUND', message: 'Analysis "sl_an_xxx" not found' },
-      },
-    },
-  })
-  async getReport(
-    @Param('id') id: string,
-    @Res({ passthrough: true }) res: FastifyReply,
-  ): Promise<AnalysisReportPendingResponseDto | Record<string, unknown>> {
-    const result = await this.analysesService.getAnalysisReport(id);
-    if (result.ready) {
-      return result.report as unknown as Record<string, unknown>;
-    }
-    res.status(HttpStatus.ACCEPTED);
-    return result.pending;
-  }
-
-  @Post(':id/retry')
-  @SkipThrottle({ 'analysis-create': false })
-  @Throttle({ 'analysis-create': { limit: 10, ttl: 60_000 } })
-  @HttpCode(HttpStatus.OK)
-  @ApiOperation({
-    summary: 'Retry a failed analysis',
-    description:
-      'Re-queues a previously failed analysis for the same URL and analysis type. No x402 payment is required - the analysis was already paid for when it was originally created. Only analyses currently in the "failed" state can be retried.',
-  })
-  @ApiParam({ name: 'id', example: 'sl_an_01j8z9k3n8v5w6x7y8z9a0b1c2' })
-  @ApiResponse({
-    status: 200,
-    description: 'Analysis reset and re-queued',
-    type: RetryAnalysisResponseDto,
-  })
-  @ApiResponse({
-    status: 400,
-    description: 'The analysis is not currently in the "failed" state',
-    schema: {
-      example: {
-        error: {
-          code: 'ANALYSIS_NOT_FAILED',
-          message: 'Only failed analyses can be retried',
-        },
-      },
-    },
-  })
-  @ApiResponse({
-    status: 404,
-    description: 'No analysis exists with this id',
-    schema: {
-      example: {
-        error: { code: 'NOT_FOUND', message: 'Analysis "sl_an_xxx" not found' },
-      },
-    },
-  })
-  @ApiResponse({
-    status: 429,
-    description:
-      'Rate limited (10/min per IP on this endpoint, or 200/min per IP globally)',
-    schema: {
-      example: {
-        error: {
-          code: 'RATE_LIMITED',
-          message: 'Too many requests. Please slow down.',
-        },
-      },
-    },
-  })
-  async retry(@Param('id') id: string): Promise<RetryAnalysisResponseDto> {
-    return this.analysesService.retryAnalysis(id);
+  redirect() {
+    return {
+      statusCode: 301,
+      message: 'This API has permanently moved to /v1/analyze/*',
+      documentation: '/docs',
+    };
   }
 }

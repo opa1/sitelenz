@@ -22,6 +22,7 @@ export class HealthController {
         status: 'ok',
         network: 'testnet',
         version: '1.0.0',
+        architecture: 'v2',
         timestamp: '2026-09-02T12:00:00.000Z',
       },
     },
@@ -31,6 +32,7 @@ export class HealthController {
       status: 'ok',
       network: this.appConfigService.network,
       version: this.appConfigService.version,
+      architecture: 'v2',
       timestamp: new Date().toISOString(),
     };
   }

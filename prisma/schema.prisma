@@ -33,6 +33,18 @@ enum ScreenshotType {
   mobile
 }
 
+enum CrawlType {
+  lightweight
+  full
+}
+
+enum AnalyzeJobStatus {
+  queued
+  running
+  completed
+  failed
+}
+
 model Analysis {
   id             String         @id
   url            String
@@ -91,4 +103,55 @@ model Screenshot {
 
   @@index([analysisId])
   @@map("screenshots")
+}
+
+model CrawlObservation {
+  id               String    @id
+  url              String
+  normalizedUrl    String
+  rawObservations  Json
+  crawlType        CrawlType
+  createdAt        DateTime  @default(now())
+  expiresAt        DateTime
+
+  @@index([normalizedUrl, crawlType, createdAt])
+  @@map("crawl_observations")
+}
+
+model AnalyzeJob {
+  id                  String           @id
+  endpoint            String
+  url                 String
+  normalizedUrl       String
+  status              AnalyzeJobStatus @default(queued)
+  progressStage       String           @default("queued")
+  errorMessage        String?
+  webhookUrl          String?
+  crawlObservationId  String?
+  result              Json?
+  createdAt           DateTime         @default(now())
+  updatedAt           DateTime         @updatedAt
+  completedAt         DateTime?
+
+  webhookDeliveries AnalyzeWebhookDelivery[]
+
+  @@index([normalizedUrl, endpoint, status, createdAt])
+  @@map("analyze_jobs")
+}
+
+model AnalyzeWebhookDelivery {
+  id             String                @id @default(cuid())
+  analyzeJobId   String
+  analyzeJob     AnalyzeJob            @relation(fields: [analyzeJobId], references: [id], onDelete: Cascade)
+  url            String
+  event          String
+  status         WebhookDeliveryStatus @default(pending)
+  attempts       Int                   @default(0)
+  lastAttemptAt  DateTime?
+  nextAttemptAt  DateTime?
+  responseStatus Int?
+  createdAt      DateTime              @default(now())
+
+  @@index([analyzeJobId])
+  @@map("analyze_webhook_deliveries")
 }

@@ -2,7 +2,12 @@ import { Module } from '@nestjs/common';
 import { BullModule } from '@nestjs/bullmq';
 import IORedis from 'ioredis';
 import { AppConfigService } from '../config';
-import { ANALYSIS_QUEUE, WEBHOOK_QUEUE } from './queue.constants';
+import {
+  ANALYSIS_QUEUE,
+  ANALYZE_QUEUE,
+  ANALYZE_WEBHOOK_QUEUE,
+  WEBHOOK_QUEUE,
+} from './queue.constants';
 
 @Module({
   imports: [
@@ -18,7 +23,12 @@ import { ANALYSIS_QUEUE, WEBHOOK_QUEUE } from './queue.constants';
       }),
       inject: [AppConfigService],
     }),
-    BullModule.registerQueue({ name: ANALYSIS_QUEUE }, { name: WEBHOOK_QUEUE }),
+    BullModule.registerQueue(
+      { name: ANALYSIS_QUEUE },
+      { name: WEBHOOK_QUEUE },
+      { name: ANALYZE_QUEUE },
+      { name: ANALYZE_WEBHOOK_QUEUE },
+    ),
   ],
   exports: [BullModule],
 })

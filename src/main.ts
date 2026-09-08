@@ -59,7 +59,9 @@ async function bootstrap() {
 
   const swaggerConfig = new DocumentBuilder()
     .setTitle('SiteLenz')
-    .setDescription('Website Intelligence API')
+    .setDescription(
+      '⚠️ /v1/analyses/* has moved permanently to /v1/analyze/*\n\nWebsite Intelligence API',
+    )
     .setVersion('1.0')
     .build();
   const document = SwaggerModule.createDocument(app, swaggerConfig);
