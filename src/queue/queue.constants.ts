@@ -37,3 +37,13 @@ export const ANALYZE_UX_ACCESSIBILITY_JOB_NAME =
 
 export const ANALYZE_SCREENSHOTS_QUEUE = 'analyze-screenshots';
 export const ANALYZE_SCREENSHOTS_JOB_NAME = 'process-analyze-screenshots';
+
+// Composite endpoints - same one-queue-per-endpoint reasoning as above.
+export const ANALYZE_AI_SUMMARY_QUEUE = 'analyze-ai-summary';
+export const ANALYZE_AI_SUMMARY_JOB_NAME = 'process-analyze-ai-summary';
+
+export const ANALYZE_STANDARD_QUEUE = 'analyze-standard';
+export const ANALYZE_STANDARD_JOB_NAME = 'process-analyze-standard';
+
+export const ANALYZE_FULL_QUEUE = 'analyze-full';
+export const ANALYZE_FULL_JOB_NAME = 'process-analyze-full';

@@ -130,6 +130,7 @@ model AnalyzeJob {
   errorMessage        String?
   webhookUrl          String?
   crawlObservationId  String?
+  findings            Json?
   result              Json?
   createdAt           DateTime         @default(now())
   updatedAt           DateTime         @updatedAt

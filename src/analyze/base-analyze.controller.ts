@@ -1,16 +1,22 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
-import { AnalyzeJobStatus } from '@prisma/client';
+import { AnalyzeJobStatus, type Prisma } from '@prisma/client';
 import type { FastifyRequest } from 'fastify';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { UrlValidatorService } from '../common/utils/url-validator.service';
+import { normalizeUrl } from '../common/utils/normalize-url.util';
 import { InvalidUrlException } from '../common/exceptions/invalid-url.exception';
 import { AnalysisNotFailedException } from '../common/exceptions/analysis-not-failed.exception';
+import { InsufficientFindingsException } from '../common/exceptions/insufficient-findings.exception';
 import { generateAnalyzeJobId } from '../common/utils/id';
 import {
+  ANALYZE_AI_SUMMARY_JOB_NAME,
+  ANALYZE_AI_SUMMARY_QUEUE,
   ANALYZE_BUSINESS_JOB_NAME,
   ANALYZE_BUSINESS_QUEUE,
+  ANALYZE_FULL_JOB_NAME,
+  ANALYZE_FULL_QUEUE,
   ANALYZE_PERFORMANCE_JOB_NAME,
   ANALYZE_PERFORMANCE_QUEUE,
   ANALYZE_SCREENSHOTS_JOB_NAME,
@@ -19,6 +25,8 @@ import {
   ANALYZE_SECURITY_QUEUE,
   ANALYZE_SEO_JOB_NAME,
   ANALYZE_SEO_QUEUE,
+  ANALYZE_STANDARD_JOB_NAME,
+  ANALYZE_STANDARD_QUEUE,
   ANALYZE_TECHNOLOGY_JOB_NAME,
   ANALYZE_TECHNOLOGY_QUEUE,
   ANALYZE_UX_ACCESSIBILITY_JOB_NAME,
@@ -36,6 +44,8 @@ export interface CreateAnalyzeJobParams {
   endpoint: AnalyzeEndpoint;
   price: number;
   req: FastifyRequest;
+  /** ai-summary only - see AnalyzeJobData.findings. */
+  findings?: Record<string, unknown>;
 }
 
 export type AnalyzeResultOutcome =
@@ -50,14 +60,15 @@ const JOB_NAME_BY_ENDPOINT: Record<AnalyzeEndpoint, string> = {
   performance: ANALYZE_PERFORMANCE_JOB_NAME,
   'ux-accessibility': ANALYZE_UX_ACCESSIBILITY_JOB_NAME,
   screenshots: ANALYZE_SCREENSHOTS_JOB_NAME,
+  'ai-summary': ANALYZE_AI_SUMMARY_JOB_NAME,
+  standard: ANALYZE_STANDARD_JOB_NAME,
+  full: ANALYZE_FULL_JOB_NAME,
 };
 
 /**
- * Shared helper each per-endpoint controller (technology/seo/security/
- * business/performance/ux-accessibility/screenshots) injects and delegates
- * to - not itself a `@Controller` / has no routes of its own. Centralizes
- * the AnalyzeJob CRUD + queueing logic common to every analyze endpoint,
- * lightweight or heavy alike.
+ * Shared helper each per-endpoint controller injects and delegates to - not
+ * itself a `@Controller` / has no routes of its own. Centralizes the
+ * AnalyzeJob CRUD + queueing logic common to every analyze endpoint.
  */
 @Injectable()
 export class BaseAnalyzeController {
@@ -79,6 +90,11 @@ export class BaseAnalyzeController {
     uxAccessibilityQueue: Queue<AnalyzeJobData>,
     @InjectQueue(ANALYZE_SCREENSHOTS_QUEUE)
     screenshotsQueue: Queue<AnalyzeJobData>,
+    @InjectQueue(ANALYZE_AI_SUMMARY_QUEUE)
+    aiSummaryQueue: Queue<AnalyzeJobData>,
+    @InjectQueue(ANALYZE_STANDARD_QUEUE)
+    standardQueue: Queue<AnalyzeJobData>,
+    @InjectQueue(ANALYZE_FULL_QUEUE) fullQueue: Queue<AnalyzeJobData>,
   ) {
     this.queues = {
       technology: technologyQueue,
@@ -88,17 +104,40 @@ export class BaseAnalyzeController {
       performance: performanceQueue,
       'ux-accessibility': uxAccessibilityQueue,
       screenshots: screenshotsQueue,
+      'ai-summary': aiSummaryQueue,
+      standard: standardQueue,
+      full: fullQueue,
     };
   }
 
   async createJob(
     params: CreateAnalyzeJobParams,
   ): Promise<AnalyzeJobCreatedResponseDto> {
-    const validation = await this.urlValidator.validate(params.url);
-    if (!validation.valid) {
-      throw new InvalidUrlException(validation.reason);
+    const isAiSummary = params.endpoint === 'ai-summary';
+
+    if (isAiSummary && Object.keys(params.findings ?? {}).length === 0) {
+      throw new InsufficientFindingsException();
     }
-    const { normalizedUrl } = validation;
+
+    // ai-summary never crawls the URL - it's descriptive metadata about
+    // what the findings are for, so only normalize the string form rather
+    // than running it through UrlValidatorService's SSRF/DNS-resolution
+    // check (which would be pointless network work for a URL nothing ever
+    // fetches).
+    let normalizedUrl: string;
+    if (isAiSummary) {
+      try {
+        normalizedUrl = normalizeUrl(params.url);
+      } catch {
+        throw new InvalidUrlException('Malformed URL');
+      }
+    } else {
+      const validation = await this.urlValidator.validate(params.url);
+      if (!validation.valid) {
+        throw new InvalidUrlException(validation.reason);
+      }
+      normalizedUrl = validation.normalizedUrl;
+    }
 
     const analyzeJobId = generateAnalyzeJobId();
     const job = await this.prisma.analyzeJob.create({
@@ -110,6 +149,9 @@ export class BaseAnalyzeController {
         status: AnalyzeJobStatus.queued,
         progressStage: 'queued',
         webhookUrl: params.webhookUrl ?? null,
+        findings: params.findings
+          ? (params.findings as Prisma.InputJsonValue)
+          : undefined,
       },
     });
 
@@ -118,6 +160,7 @@ export class BaseAnalyzeController {
       endpoint: params.endpoint,
       url: normalizedUrl,
       normalizedUrl,
+      ...(params.findings ? { findings: params.findings } : {}),
     };
     await this.queues[params.endpoint].add(
       JOB_NAME_BY_ENDPOINT[params.endpoint],
@@ -205,6 +248,11 @@ export class BaseAnalyzeController {
         endpoint,
         url: updated.url,
         normalizedUrl: updated.normalizedUrl,
+        // Only ai-summary jobs ever have findings persisted; undefined for
+        // every other endpoint, so this is a no-op for them.
+        ...(updated.findings
+          ? { findings: updated.findings as Record<string, unknown> }
+          : {}),
       },
       { jobId: id },
     );

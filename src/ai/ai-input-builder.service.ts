@@ -5,6 +5,7 @@ import type { SecurityResult } from '../analyzers/security/security-result.inter
 import type { PerformanceResult } from '../analyzers/performance/performance-result.interface';
 import type { BusinessResult } from '../analyzers/business/business-result.interface';
 import type { UxResult } from '../analyzers/ux/ux-result.interface';
+import { createSafe } from '../common/utils/analyzer-safety.util';
 import type {
   AnalysisInput,
   CondensedBusiness,
@@ -14,6 +15,8 @@ import type {
   CondensedTechnology,
   CondensedUx,
 } from './ai-input.interface';
+
+const safe = createSafe('ai-input-builder');
 
 export interface AnalyzerResultsBundle {
   technology: TechnologyResult;
@@ -175,5 +178,49 @@ export class AiInputBuilderService {
       ux: compact(condenseUx(results.ux)) ?? {},
     };
     return input;
+  }
+
+  /**
+   * ai-summary's counterpart to build() - the client supplies `findings`
+   * directly (any subset of analyzer output keys, client-controlled and
+   * possibly partial/malformed), rather than this service receiving
+   * guaranteed-shaped results from analyzers that just ran. Each section is
+   * condensed independently behind `safe()` so one missing/malformed key
+   * (e.g. `findings.security` present but missing `.https`) only drops that
+   * section instead of failing the whole request.
+   */
+  buildFromFindings(findings: Record<string, any>): AnalysisInput {
+    return {
+      analysisType: 'standard',
+      technology: findings.technology
+        ? safe(() => condenseTechnology(findings.technology as TechnologyResult), [])
+        : [],
+      seo: findings.seo
+        ? safe(() => compact(condenseSeo(findings.seo as SeoResult)) ?? {}, {})
+        : {},
+      security: findings.security
+        ? safe(
+            () => compact(condenseSecurity(findings.security as SecurityResult)) ?? {},
+            {},
+          )
+        : {},
+      performance: findings.performance
+        ? safe(
+            () =>
+              compact(condensePerformance(findings.performance as PerformanceResult)) ??
+              {},
+            {},
+          )
+        : {},
+      business: findings.business
+        ? safe(
+            () => compact(condenseBusiness(findings.business as BusinessResult)) ?? {},
+            {},
+          )
+        : {},
+      ux: findings.ux
+        ? safe(() => compact(condenseUx(findings.ux as UxResult)) ?? {}, {})
+        : {},
+    };
   }
 }

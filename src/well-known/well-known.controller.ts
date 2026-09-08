@@ -2,12 +2,10 @@ import { Controller, Get, Req } from '@nestjs/common';
 import { SkipThrottle } from '@nestjs/throttler';
 import type { FastifyRequest } from 'fastify';
 import { AppConfigService } from '../config';
+import { ANALYZE_ENDPOINT_CATALOG } from '../analyze/analyze-endpoint-catalog';
 import {
   ALGORAND_MAINNET_NETWORK,
   ALGORAND_TESTNET_NETWORK,
-  ANALYZE_HEAVY_PRICE_USD,
-  ANALYZE_LIGHTWEIGHT_PRICE_USD,
-  ANALYZE_PERFORMANCE_PRICE_USD,
   X402_GLOBAL_CHALLENGE_TAG,
 } from '../x402/x402.constants';
 
@@ -34,55 +32,13 @@ interface X402DiscoveryDocument {
 // as the payment protocol itself, not a human-readable dollar figure.
 const USDC_DECIMALS = 6;
 
-// Description text is deliberately concrete about what the caller receives,
-// not just the topic - matches how X402Guard's own bazaar extension example
-// output looks, and gives an agent enough to decide whether the endpoint is
-// worth paying for without a round trip. `price` must match that route's
-// @SetAnalyzePrice value.
-const ANALYZE_ENDPOINTS: { name: string; description: string; price: number }[] = [
-  {
-    name: 'technology',
-    description:
-      'Detects frontend frameworks, CMS, CDN, analytics, payment providers, CSS libraries, and fonts from HTTP headers, DOM markers, and script analysis.',
-    price: ANALYZE_LIGHTWEIGHT_PRICE_USD,
-  },
-  {
-    name: 'seo',
-    description:
-      'Inspects title, meta description, canonical, robots directives, Open Graph, Twitter cards, heading structure, image alt coverage, and structured data.',
-    price: ANALYZE_LIGHTWEIGHT_PRICE_USD,
-  },
-  {
-    name: 'security',
-    description:
-      'Audits HTTP security headers (HSTS, CSP, X-Frame-Options, Referrer-Policy), HTTPS status, mixed content, and TLS certificate validity.',
-    price: ANALYZE_LIGHTWEIGHT_PRICE_USD,
-  },
-  {
-    name: 'business',
-    description:
-      'Extracts business name, description, contact info, social links, pricing signals, CTA text, and business model indicators.',
-    price: ANALYZE_LIGHTWEIGHT_PRICE_USD,
-  },
-  {
-    name: 'performance',
-    description:
-      'Runs a full Lighthouse audit and Playwright session to collect Core Web Vitals (LCP, CLS, FCP, TBT, TTFB), page weight, resource inventory, and third-party domain analysis.',
-    price: ANALYZE_PERFORMANCE_PRICE_USD,
-  },
-  {
-    name: 'ux-accessibility',
-    description:
-      'Evaluates mobile viewport configuration, navigation structure, form detection, CTA presence, reading metrics, and Lighthouse accessibility audit scores.',
-    price: ANALYZE_HEAVY_PRICE_USD,
-  },
-  {
-    name: 'screenshots',
-    description:
-      'Captures full desktop (1280x720) and mobile (390x844) viewport screenshots via headless Chromium and returns Cloudinary-hosted image URLs.',
-    price: ANALYZE_HEAVY_PRICE_USD,
-  },
-];
+// The client body shape differs only for ai-summary (findings, not just a
+// url to crawl) - everything else takes {"url": "..."}.
+function bodyHintFor(name: string): string {
+  return name === 'ai-summary'
+    ? '{"url": "...", "findings": {"seo": {...}, "security": {...}}}'
+    : '{"url": "..."}';
+}
 
 @SkipThrottle({ 'analysis-create': true })
 @Controller('.well-known')
@@ -137,10 +93,10 @@ export class WellKnownController {
           payTo: networkConfig.payToAddress,
           extra: { tag: X402_GLOBAL_CHALLENGE_TAG },
         },
-        ...ANALYZE_ENDPOINTS.map(({ name, description, price }) => ({
+        ...ANALYZE_ENDPOINT_CATALOG.map(({ name, description, price }) => ({
           url: `${origin}/v1/analyze/${name}`,
           method: 'POST' as const,
-          description: `${description} $${price}. Body: {"url": "..."}`,
+          description: `${description} $${price}. Body: ${bodyHintFor(name)}`,
           network,
           asset: networkConfig.usdcAssetId,
           amount: toAmount(price),

@@ -16,6 +16,7 @@ import { X402PaymentRequiredException } from '../../x402/exceptions/x402-payment
 import { InvalidUrlException } from '../exceptions/invalid-url.exception';
 import { CapacityExceededException } from '../exceptions/capacity-exceeded.exception';
 import { AnalysisNotFailedException } from '../exceptions/analysis-not-failed.exception';
+import { InsufficientFindingsException } from '../exceptions/insufficient-findings.exception';
 
 interface ErrorBody {
   error: { code: string; message: string; details?: unknown };
@@ -86,6 +87,14 @@ export class AllExceptionsFilter implements ExceptionFilter {
       void reply
         .status(HttpStatus.BAD_REQUEST)
         .send(this.body('ANALYSIS_NOT_FAILED', exception.message));
+      return;
+    }
+
+    // Also subclasses BadRequestException - check before the generic branch.
+    if (exception instanceof InsufficientFindingsException) {
+      void reply
+        .status(HttpStatus.BAD_REQUEST)
+        .send(this.body('INSUFFICIENT_FINDINGS', exception.message));
       return;
     }
 
