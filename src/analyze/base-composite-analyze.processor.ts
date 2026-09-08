@@ -1,13 +1,10 @@
 import { Inject, Logger } from '@nestjs/common';
 import type { Job } from 'bullmq';
-import type { BrowserContext } from 'playwright';
-import { ScreenshotType } from '@prisma/client';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { BrowserService } from '../common/browser/browser.service';
 import { ObservationCollector } from '../common/browser/observation-collector.service';
 import { LighthouseService } from '../common/browser/lighthouse.service';
-import { BlockerDismissalService } from '../common/browser/blocker-dismissal.service';
-import { CloudinaryService } from '../storage/cloudinary.service';
+import { ScreenshotCaptureService } from '../storage/screenshot-capture.service';
 import { TechnologyAnalyzerService } from '../analyzers/technology/technology-analyzer.service';
 import { SeoAnalyzerService } from '../analyzers/seo/seo-analyzer.service';
 import { SecurityAnalyzerService } from '../analyzers/security/security-analyzer.service';
@@ -51,8 +48,7 @@ export abstract class BaseCompositeAnalyzeProcessor extends BaseHeavyAnalyzeProc
     observationCollector: ObservationCollector,
     lighthouseService: LighthouseService,
     concurrencyGate: HeavyAnalyzeConcurrencyGate,
-    protected readonly blockerDismissalService: BlockerDismissalService,
-    protected readonly cloudinaryService: CloudinaryService,
+    protected readonly screenshotCapture: ScreenshotCaptureService,
     protected readonly technologyAnalyzer: TechnologyAnalyzerService,
     protected readonly seoAnalyzer: SeoAnalyzerService,
     protected readonly securityAnalyzer: SecurityAnalyzerService,
@@ -93,31 +89,39 @@ export abstract class BaseCompositeAnalyzeProcessor extends BaseHeavyAnalyzeProc
       // Fault-tolerant like the standalone screenshots endpoint: a capture
       // timing out (real sites with continuous animations/video backgrounds
       // can hang Playwright's screenshot stability wait - see
-      // captureScreenshot's `animations: 'disabled'` below) shouldn't
+      // ScreenshotCaptureService's `animations: 'disabled'`) shouldn't
       // discard an already-completed crawl and, later, all six analyzers.
       let desktopEntry: ScreenshotEntry | null = null;
       let mobileEntry: ScreenshotEntry | null = null;
 
-      const onScreenshotError = (type: 'desktop' | 'mobile') => (error: Error) => {
-        this.logger.error(
-          `${type === 'desktop' ? 'Desktop' : 'Mobile'} screenshot failed for analyze job ${analyzeJobId}: ${error.message}`,
-        );
-        return null;
-      };
+      const onScreenshotError =
+        (type: 'desktop' | 'mobile') => (error: Error) => {
+          this.logger.error(
+            `${type === 'desktop' ? 'Desktop' : 'Mobile'} screenshot failed for analyze job ${analyzeJobId}: ${error.message}`,
+          );
+          return null;
+        };
 
       if (!resolved.cacheHit && resolved.context && resolved.releaseContext) {
         try {
-          desktopEntry = await this.captureScreenshot(
-            resolved.context,
-            observations.url,
-            analyzeJobId,
-            'desktop',
-          ).catch(onScreenshotError('desktop'));
+          desktopEntry = await this.screenshotCapture
+            .capture(
+              resolved.context,
+              observations.url,
+              analyzeJobId,
+              'desktop',
+            )
+            .catch(onScreenshotError('desktop'));
           if (includeMobile) {
             mobileEntry = await this.withGatedContext(
               () => this.browserService.acquireMobileContext(),
               (context) =>
-                this.captureScreenshot(context, observations.url, analyzeJobId, 'mobile'),
+                this.screenshotCapture.capture(
+                  context,
+                  observations.url,
+                  analyzeJobId,
+                  'mobile',
+                ),
             ).catch(onScreenshotError('mobile'));
           }
         } finally {
@@ -129,13 +133,23 @@ export abstract class BaseCompositeAnalyzeProcessor extends BaseHeavyAnalyzeProc
         desktopEntry = await this.withGatedContext(
           () => this.browserService.acquireContext(),
           (context) =>
-            this.captureScreenshot(context, observations.url, analyzeJobId, 'desktop'),
+            this.screenshotCapture.capture(
+              context,
+              observations.url,
+              analyzeJobId,
+              'desktop',
+            ),
         ).catch(onScreenshotError('desktop'));
         if (includeMobile) {
           mobileEntry = await this.withGatedContext(
             () => this.browserService.acquireMobileContext(),
             (context) =>
-              this.captureScreenshot(context, observations.url, analyzeJobId, 'mobile'),
+              this.screenshotCapture.capture(
+                context,
+                observations.url,
+                analyzeJobId,
+                'mobile',
+              ),
           ).catch(onScreenshotError('mobile'));
         }
       }
@@ -149,7 +163,10 @@ export abstract class BaseCompositeAnalyzeProcessor extends BaseHeavyAnalyzeProc
         observations,
         analyzerOptions,
       );
-      const seoResult = await this.seoAnalyzer.analyze(observations, analyzerOptions);
+      const seoResult = await this.seoAnalyzer.analyze(
+        observations,
+        analyzerOptions,
+      );
       const securityResult = await this.securityAnalyzer.analyze(
         observations,
         analyzerOptions,
@@ -162,7 +179,10 @@ export abstract class BaseCompositeAnalyzeProcessor extends BaseHeavyAnalyzeProc
         observations,
         analyzerOptions,
       );
-      const uxResult = await this.uxAnalyzer.analyze(observations, analyzerOptions);
+      const uxResult = await this.uxAnalyzer.analyze(
+        observations,
+        analyzerOptions,
+      );
 
       stage = 'ai_analysis';
       await this.updateStage(analyzeJobId, stage);
@@ -177,7 +197,9 @@ export abstract class BaseCompositeAnalyzeProcessor extends BaseHeavyAnalyzeProc
         },
         { deep },
       );
-      const aiResult = await this.aiProvider.interpret(condensedInput, { deep });
+      const aiResult = await this.aiProvider.interpret(condensedInput, {
+        deep,
+      });
 
       stage = 'storing_results';
       await this.updateStage(analyzeJobId, stage);
@@ -206,7 +228,7 @@ export abstract class BaseCompositeAnalyzeProcessor extends BaseHeavyAnalyzeProc
           cacheHit: resolved.cacheHit,
         },
       };
-      await this.completeJob(analyzeJobId, result as unknown as Record<string, any>);
+      await this.completeJob(analyzeJobId, result);
 
       stage = 'sending_webhook';
       await this.updateStage(analyzeJobId, stage);
@@ -229,7 +251,8 @@ export abstract class BaseCompositeAnalyzeProcessor extends BaseHeavyAnalyzeProc
       );
     } catch (error) {
       const err = error as Error & { code?: string };
-      const errorMessage = error instanceof Error ? error.message : String(error);
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
 
       this.logger.error(`${endpoint} analyze job failed`, {
         analyzeJobId,
@@ -238,11 +261,13 @@ export abstract class BaseCompositeAnalyzeProcessor extends BaseHeavyAnalyzeProc
         error: errorMessage,
       });
 
-      await this.failJob(analyzeJobId, err, stage).catch((updateError: Error) => {
-        this.logger.error(
-          `Failed to mark analyze job ${analyzeJobId} as failed: ${updateError.message}`,
-        );
-      });
+      await this.failJob(analyzeJobId, err, stage).catch(
+        (updateError: Error) => {
+          this.logger.error(
+            `Failed to mark analyze job ${analyzeJobId} as failed: ${updateError.message}`,
+          );
+        },
+      );
 
       await this.analyzeWebhookService
         .deliver(analyzeJobId, 'analyze.failed', {
@@ -257,64 +282,6 @@ export abstract class BaseCompositeAnalyzeProcessor extends BaseHeavyAnalyzeProc
             `Failed to enqueue failure webhook for analyze job ${analyzeJobId}: ${webhookError.message}`,
           );
         });
-    }
-  }
-
-  private async captureScreenshot(
-    context: BrowserContext,
-    url: string,
-    analyzeJobId: string,
-    type: 'desktop' | 'mobile',
-  ): Promise<ScreenshotEntry> {
-    const page = await context.newPage();
-    try {
-      await page.goto(url, { waitUntil: 'load' });
-
-      const dismissal = await this.blockerDismissalService
-        .dismissBlockers(page)
-        .catch((error: Error) => {
-          this.logger.warn(
-            `Blocker dismissal failed for analyze job ${analyzeJobId} (${type}): ${error.message}`,
-          );
-          return { dismissed: false, method: 'none' as const };
-        });
-      if (dismissal.dismissed) {
-        this.logger.log(
-          `Dismissed a page blocker for analyze job ${analyzeJobId} (${type}) via ${dismissal.method}`,
-        );
-      }
-
-      // animations: 'disabled' freezes CSS animations/transitions before
-      // capture - Playwright's screenshot always waits for the page to
-      // reach a visually "stable" frame first, regardless of this option,
-      // and that wait never converges on a page with continuously-running
-      // animations/video backgrounds (observed live: a 120s screenshot
-      // timeout on stripe.com, well past "fonts loaded"). Freezing
-      // animations first lets the stability check succeed immediately.
-      const buffer = await page.screenshot({
-        fullPage: false,
-        type: 'png',
-        animations: 'disabled',
-      });
-      const uploaded = await this.cloudinaryService.uploadScreenshot(
-        buffer,
-        analyzeJobId,
-        type,
-      );
-      const takenAt = new Date().toISOString();
-
-      await this.prisma.screenshot.create({
-        data: {
-          analyzeJobId,
-          type: type === 'desktop' ? ScreenshotType.desktop : ScreenshotType.mobile,
-          cloudinaryUrl: uploaded.url,
-          cloudinaryPublicId: uploaded.publicId,
-        },
-      });
-
-      return { url: uploaded.url, cloudinaryPublicId: uploaded.publicId, takenAt };
-    } finally {
-      await page.close().catch(() => undefined);
     }
   }
 }

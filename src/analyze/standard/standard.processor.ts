@@ -4,8 +4,7 @@ import { PrismaService } from '../../common/prisma/prisma.service';
 import { BrowserService } from '../../common/browser/browser.service';
 import { ObservationCollector } from '../../common/browser/observation-collector.service';
 import { LighthouseService } from '../../common/browser/lighthouse.service';
-import { BlockerDismissalService } from '../../common/browser/blocker-dismissal.service';
-import { CloudinaryService } from '../../storage/cloudinary.service';
+import { ScreenshotCaptureService } from '../../storage/screenshot-capture.service';
 import { TechnologyAnalyzerService } from '../../analyzers/technology/technology-analyzer.service';
 import { SeoAnalyzerService } from '../../analyzers/seo/seo-analyzer.service';
 import { SecurityAnalyzerService } from '../../analyzers/security/security-analyzer.service';
@@ -46,8 +45,7 @@ export class StandardProcessor extends BaseCompositeAnalyzeProcessor {
     observationCollector: ObservationCollector,
     lighthouseService: LighthouseService,
     concurrencyGate: HeavyAnalyzeConcurrencyGate,
-    blockerDismissalService: BlockerDismissalService,
-    cloudinaryService: CloudinaryService,
+    screenshotCapture: ScreenshotCaptureService,
     technologyAnalyzer: TechnologyAnalyzerService,
     seoAnalyzer: SeoAnalyzerService,
     securityAnalyzer: SecurityAnalyzerService,
@@ -66,8 +64,7 @@ export class StandardProcessor extends BaseCompositeAnalyzeProcessor {
       observationCollector,
       lighthouseService,
       concurrencyGate,
-      blockerDismissalService,
-      cloudinaryService,
+      screenshotCapture,
       technologyAnalyzer,
       seoAnalyzer,
       securityAnalyzer,

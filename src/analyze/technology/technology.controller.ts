@@ -60,7 +60,9 @@ export class TechnologyController {
   @ApiResponse({
     status: 400,
     description: 'Request body failed validation, or the URL is invalid/unsafe',
-    schema: { example: { error: { code: 'INVALID_URL', message: 'Malformed URL' } } },
+    schema: {
+      example: { error: { code: 'INVALID_URL', message: 'Malformed URL' } },
+    },
   })
   @ApiResponse({
     status: 402,
@@ -90,10 +92,14 @@ export class TechnologyController {
   })
   @ApiResponse({
     status: 429,
-    description: 'Rate limited (10/min per IP on this endpoint, or 200/min globally)',
+    description:
+      'Rate limited (10/min per IP on this endpoint, or 200/min globally)',
     schema: {
       example: {
-        error: { code: 'RATE_LIMITED', message: 'Too many requests. Please slow down.' },
+        error: {
+          code: 'RATE_LIMITED',
+          message: 'Too many requests. Please slow down.',
+        },
       },
     },
   })
@@ -123,12 +129,21 @@ export class TechnologyController {
   @Get(':id')
   @ApiOperation({ summary: 'Get technology analyze job status and progress' })
   @ApiParam({ name: 'id', example: 'sl_aj_01j8z9k3n8v5w6x7y8z9a0b1c2' })
-  @ApiResponse({ status: 200, description: 'Job found', type: AnalyzeJobStatusResponseDto })
+  @ApiResponse({
+    status: 200,
+    description: 'Job found',
+    type: AnalyzeJobStatusResponseDto,
+  })
   @ApiResponse({
     status: 404,
     description: 'No analyze job exists with this id',
     schema: {
-      example: { error: { code: 'NOT_FOUND', message: 'Analyze job "sl_aj_xxx" not found' } },
+      example: {
+        error: {
+          code: 'NOT_FOUND',
+          message: 'Analyze job "sl_aj_xxx" not found',
+        },
+      },
     },
   })
   async getJob(@Param('id') id: string): Promise<AnalyzeJobStatusResponseDto> {
@@ -156,7 +171,12 @@ export class TechnologyController {
     status: 404,
     description: 'No analyze job exists with this id',
     schema: {
-      example: { error: { code: 'NOT_FOUND', message: 'Analyze job "sl_aj_xxx" not found' } },
+      example: {
+        error: {
+          code: 'NOT_FOUND',
+          message: 'Analyze job "sl_aj_xxx" not found',
+        },
+      },
     },
   })
   async getResult(
@@ -179,13 +199,20 @@ export class TechnologyController {
       'Re-queues a previously failed job for the same URL. No x402 payment is required. Only jobs currently in the "failed" state can be retried.',
   })
   @ApiParam({ name: 'id', example: 'sl_aj_01j8z9k3n8v5w6x7y8z9a0b1c2' })
-  @ApiResponse({ status: 200, description: 'Job reset and re-queued', type: RetryAnalyzeJobResponseDto })
+  @ApiResponse({
+    status: 200,
+    description: 'Job reset and re-queued',
+    type: RetryAnalyzeJobResponseDto,
+  })
   @ApiResponse({
     status: 400,
     description: 'The job is not currently in the "failed" state',
     schema: {
       example: {
-        error: { code: 'ANALYSIS_NOT_FAILED', message: 'Only failed analyses can be retried' },
+        error: {
+          code: 'ANALYSIS_NOT_FAILED',
+          message: 'Only failed analyses can be retried',
+        },
       },
     },
   })
@@ -193,7 +220,12 @@ export class TechnologyController {
     status: 404,
     description: 'No analyze job exists with this id',
     schema: {
-      example: { error: { code: 'NOT_FOUND', message: 'Analyze job "sl_aj_xxx" not found' } },
+      example: {
+        error: {
+          code: 'NOT_FOUND',
+          message: 'Analyze job "sl_aj_xxx" not found',
+        },
+      },
     },
   })
   async retry(@Param('id') id: string): Promise<RetryAnalyzeJobResponseDto> {

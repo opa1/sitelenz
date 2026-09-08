@@ -8,7 +8,13 @@ import { SeoController } from './seo.controller';
 import { SeoProcessor } from './seo.processor';
 
 @Module({
-  imports: [AnalyzeModule, QueueModule, BrowserModule, SeoAnalyzerModule, X402Module],
+  imports: [
+    AnalyzeModule,
+    QueueModule,
+    BrowserModule,
+    SeoAnalyzerModule,
+    X402Module,
+  ],
   controllers: [SeoController],
   providers: [SeoProcessor],
 })

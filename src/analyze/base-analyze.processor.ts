@@ -53,8 +53,7 @@ export abstract class BaseAnalyzeProcessor extends WorkerHost {
     if (cached) {
       return {
         observations: cached.rawObservations as unknown as
-          | LightweightObservations
-          | RawObservations,
+          LightweightObservations | RawObservations,
         crawlType: cached.crawlType,
         cacheHit: true,
       };
@@ -80,10 +79,15 @@ export abstract class BaseAnalyzeProcessor extends WorkerHost {
     if (resolved.crawlType === 'full') {
       return resolved.observations as RawObservations;
     }
-    return toRawObservationsShape(resolved.observations as LightweightObservations);
+    return toRawObservationsShape(
+      resolved.observations as LightweightObservations,
+    );
   }
 
-  protected async updateStage(analyzeJobId: string, stage: string): Promise<void> {
+  protected async updateStage(
+    analyzeJobId: string,
+    stage: string,
+  ): Promise<void> {
     await this.prisma.analyzeJob.update({
       where: { id: analyzeJobId },
       data: { progressStage: stage },
@@ -96,7 +100,10 @@ export abstract class BaseAnalyzeProcessor extends WorkerHost {
    * transition goes through `updateStage` (progressStage only) so it can't
    * clobber the terminal status `completeJob`/`failJob` set.
    */
-  protected async markRunning(analyzeJobId: string, stage: string): Promise<void> {
+  protected async markRunning(
+    analyzeJobId: string,
+    stage: string,
+  ): Promise<void> {
     await this.prisma.analyzeJob.update({
       where: { id: analyzeJobId },
       data: { status: AnalyzeJobStatus.running, progressStage: stage },

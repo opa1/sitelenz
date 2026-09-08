@@ -89,7 +89,10 @@ export abstract class BaseHeavyAnalyzeProcessor extends BaseAnalyzeProcessor {
   ): Promise<ResolvedFullObservations> {
     const normalizedUrl = normalizeUrl(job.url);
 
-    const cached = await this.crawlCache.getFreshObservation(normalizedUrl, 'full');
+    const cached = await this.crawlCache.getFreshObservation(
+      normalizedUrl,
+      'full',
+    );
     if (cached) {
       return {
         observations: cached.rawObservations as unknown as RawObservations,
@@ -99,7 +102,10 @@ export abstract class BaseHeavyAnalyzeProcessor extends BaseAnalyzeProcessor {
     }
 
     const crawl = async (context: BrowserContext): Promise<RawObservations> => {
-      const observations = await this.observationCollector.collect(context, job.url);
+      const observations = await this.observationCollector.collect(
+        context,
+        job.url,
+      );
       observations.lighthouseResult = await this.lighthouseService.run(
         observations.url,
       );

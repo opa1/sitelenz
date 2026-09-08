@@ -44,10 +44,9 @@ export class X402Guard implements CanActivate {
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest<FastifyRequest>();
 
-    const analyzeEndpoint = this.reflector.getAllAndOverride<string | undefined>(
-      ANALYZE_ENDPOINT_KEY,
-      [context.getHandler(), context.getClass()],
-    );
+    const analyzeEndpoint = this.reflector.getAllAndOverride<
+      string | undefined
+    >(ANALYZE_ENDPOINT_KEY, [context.getHandler(), context.getClass()]);
     if (!analyzeEndpoint) {
       throw new InternalServerErrorException(
         'X402Guard applied to a route with no @SetAnalyzePrice endpoint',

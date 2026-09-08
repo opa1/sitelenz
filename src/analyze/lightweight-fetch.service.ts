@@ -62,7 +62,10 @@ export class LightweightFetchService {
     for (;;) {
       const validation = await this.urlValidator.validate(currentUrl);
       if (!validation.valid) {
-        throw new LightweightFetchError('WEBSITE_UNAVAILABLE', validation.reason);
+        throw new LightweightFetchError(
+          'WEBSITE_UNAVAILABLE',
+          validation.reason,
+        );
       }
 
       const controller = new AbortController();

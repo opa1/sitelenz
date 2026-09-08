@@ -177,7 +177,7 @@ export class BaseAnalyzeController {
         ready: false,
         pending: {
           analyzeJobId: job.id,
-          status: job.status as 'queued' | 'running' | 'failed',
+          status: job.status,
           message: 'Analysis not yet complete',
         },
       };

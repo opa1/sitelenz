@@ -60,9 +60,12 @@ export class PerformanceProcessor extends BaseHeavyAnalyzeProcessor {
       stage = 'analyzing';
       await this.updateStage(analyzeJobId, stage);
       // deep: true - full resource inventory and third-party analysis.
-      const result = await this.performanceAnalyzer.analyze(resolved.observations, {
-        deep: true,
-      });
+      const result = await this.performanceAnalyzer.analyze(
+        resolved.observations,
+        {
+          deep: true,
+        },
+      );
 
       stage = 'storing_results';
       await this.updateStage(analyzeJobId, stage);
@@ -89,7 +92,8 @@ export class PerformanceProcessor extends BaseHeavyAnalyzeProcessor {
       );
     } catch (error) {
       const err = error as Error & { code?: string };
-      const errorMessage = error instanceof Error ? error.message : String(error);
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
 
       this.logger.error(`${ENDPOINT} analyze job failed`, {
         analyzeJobId,
@@ -98,11 +102,13 @@ export class PerformanceProcessor extends BaseHeavyAnalyzeProcessor {
         error: errorMessage,
       });
 
-      await this.failJob(analyzeJobId, err, stage).catch((updateError: Error) => {
-        this.logger.error(
-          `Failed to mark analyze job ${analyzeJobId} as failed: ${updateError.message}`,
-        );
-      });
+      await this.failJob(analyzeJobId, err, stage).catch(
+        (updateError: Error) => {
+          this.logger.error(
+            `Failed to mark analyze job ${analyzeJobId} as failed: ${updateError.message}`,
+          );
+        },
+      );
 
       await this.analyzeWebhookService
         .deliver(analyzeJobId, 'analyze.failed', {

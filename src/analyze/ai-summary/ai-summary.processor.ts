@@ -83,7 +83,10 @@ export class AiSummaryProcessor extends BaseHeavyAnalyzeProcessor {
         observations,
         analyzerOptions,
       );
-      const seoResult = await this.seoAnalyzer.analyze(observations, analyzerOptions);
+      const seoResult = await this.seoAnalyzer.analyze(
+        observations,
+        analyzerOptions,
+      );
       const securityResult = await this.securityAnalyzer.analyze(
         observations,
         analyzerOptions,
@@ -96,7 +99,10 @@ export class AiSummaryProcessor extends BaseHeavyAnalyzeProcessor {
         observations,
         analyzerOptions,
       );
-      const uxResult = await this.uxAnalyzer.analyze(observations, analyzerOptions);
+      const uxResult = await this.uxAnalyzer.analyze(
+        observations,
+        analyzerOptions,
+      );
 
       stage = 'ai_analysis';
       await this.updateStage(analyzeJobId, stage);
@@ -111,7 +117,9 @@ export class AiSummaryProcessor extends BaseHeavyAnalyzeProcessor {
         },
         { deep: false },
       );
-      const aiResult = await this.aiProvider.interpret(condensedInput, { deep: false });
+      const aiResult = await this.aiProvider.interpret(condensedInput, {
+        deep: false,
+      });
 
       stage = 'storing_results';
       await this.updateStage(analyzeJobId, stage);
@@ -124,7 +132,7 @@ export class AiSummaryProcessor extends BaseHeavyAnalyzeProcessor {
           cacheHit: resolved.cacheHit,
         },
       };
-      await this.completeJob(analyzeJobId, result as unknown as Record<string, any>);
+      await this.completeJob(analyzeJobId, result);
 
       stage = 'sending_webhook';
       await this.updateStage(analyzeJobId, stage);
@@ -147,7 +155,8 @@ export class AiSummaryProcessor extends BaseHeavyAnalyzeProcessor {
       );
     } catch (error) {
       const err = error as Error & { code?: string };
-      const errorMessage = error instanceof Error ? error.message : String(error);
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
 
       this.logger.error(`${ENDPOINT} analyze job failed`, {
         analyzeJobId,
@@ -156,11 +165,13 @@ export class AiSummaryProcessor extends BaseHeavyAnalyzeProcessor {
         error: errorMessage,
       });
 
-      await this.failJob(analyzeJobId, err, stage).catch((updateError: Error) => {
-        this.logger.error(
-          `Failed to mark analyze job ${analyzeJobId} as failed: ${updateError.message}`,
-        );
-      });
+      await this.failJob(analyzeJobId, err, stage).catch(
+        (updateError: Error) => {
+          this.logger.error(
+            `Failed to mark analyze job ${analyzeJobId} as failed: ${updateError.message}`,
+          );
+        },
+      );
 
       await this.analyzeWebhookService
         .deliver(analyzeJobId, 'analyze.failed', {

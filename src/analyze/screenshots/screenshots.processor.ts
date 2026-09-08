@@ -1,14 +1,11 @@
 import { Logger } from '@nestjs/common';
 import { Processor } from '@nestjs/bullmq';
 import type { Job } from 'bullmq';
-import type { BrowserContext } from 'playwright';
-import { ScreenshotType } from '@prisma/client';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { BrowserService } from '../../common/browser/browser.service';
 import { ObservationCollector } from '../../common/browser/observation-collector.service';
 import { LighthouseService } from '../../common/browser/lighthouse.service';
-import { BlockerDismissalService } from '../../common/browser/blocker-dismissal.service';
-import { CloudinaryService } from '../../storage/cloudinary.service';
+import { ScreenshotCaptureService } from '../../storage/screenshot-capture.service';
 import { ANALYZE_SCREENSHOTS_QUEUE } from '../../queue/queue.constants';
 import { CrawlCacheService } from '../crawl-cache.service';
 import { LightweightFetchService } from '../lightweight-fetch.service';
@@ -19,7 +16,10 @@ import {
   type ResolvedFullObservations,
 } from '../base-heavy-analyze.processor';
 import type { AnalyzeJobData } from '../analyze-job.interface';
-import type { ScreenshotEntry, ScreenshotsAnalyzeResult } from './screenshots-result.interface';
+import type {
+  ScreenshotEntry,
+  ScreenshotsAnalyzeResult,
+} from './screenshots-result.interface';
 
 const ENDPOINT = 'screenshots' as const;
 
@@ -39,8 +39,7 @@ export class ScreenshotsProcessor extends BaseHeavyAnalyzeProcessor {
     observationCollector: ObservationCollector,
     lighthouseService: LighthouseService,
     concurrencyGate: HeavyAnalyzeConcurrencyGate,
-    private readonly blockerDismissalService: BlockerDismissalService,
-    private readonly cloudinaryService: CloudinaryService,
+    private readonly screenshotCapture: ScreenshotCaptureService,
     private readonly analyzeWebhookService: AnalyzeWebhookService,
   ) {
     super(
@@ -71,7 +70,10 @@ export class ScreenshotsProcessor extends BaseHeavyAnalyzeProcessor {
       stage = 'taking_screenshots';
       await this.updateStage(analyzeJobId, stage);
 
-      const desktopEntry = await this.captureDesktopEntry(resolved, analyzeJobId);
+      const desktopEntry = await this.captureDesktopEntry(
+        resolved,
+        analyzeJobId,
+      );
       const mobileEntry = await this.captureMobileEntry(pageUrl, analyzeJobId);
 
       stage = 'storing_results';
@@ -80,7 +82,7 @@ export class ScreenshotsProcessor extends BaseHeavyAnalyzeProcessor {
         desktop: desktopEntry,
         mobile: mobileEntry,
       };
-      await this.completeJob(analyzeJobId, result as unknown as Record<string, any>);
+      await this.completeJob(analyzeJobId, result);
 
       stage = 'sending_webhook';
       await this.updateStage(analyzeJobId, stage);
@@ -103,7 +105,8 @@ export class ScreenshotsProcessor extends BaseHeavyAnalyzeProcessor {
       );
     } catch (error) {
       const err = error as Error & { code?: string };
-      const errorMessage = error instanceof Error ? error.message : String(error);
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
 
       this.logger.error(`${ENDPOINT} analyze job failed`, {
         analyzeJobId,
@@ -112,11 +115,13 @@ export class ScreenshotsProcessor extends BaseHeavyAnalyzeProcessor {
         error: errorMessage,
       });
 
-      await this.failJob(analyzeJobId, err, stage).catch((updateError: Error) => {
-        this.logger.error(
-          `Failed to mark analyze job ${analyzeJobId} as failed: ${updateError.message}`,
-        );
-      });
+      await this.failJob(analyzeJobId, err, stage).catch(
+        (updateError: Error) => {
+          this.logger.error(
+            `Failed to mark analyze job ${analyzeJobId} as failed: ${updateError.message}`,
+          );
+        },
+      );
 
       await this.analyzeWebhookService
         .deliver(analyzeJobId, 'analyze.failed', {
@@ -152,7 +157,12 @@ export class ScreenshotsProcessor extends BaseHeavyAnalyzeProcessor {
     if (!resolved.cacheHit && resolved.context && resolved.releaseContext) {
       const context = resolved.context;
       try {
-        return await this.captureScreenshot(context, pageUrl, analyzeJobId, 'desktop');
+        return await this.screenshotCapture.capture(
+          context,
+          pageUrl,
+          analyzeJobId,
+          'desktop',
+        );
       } catch (error) {
         this.logger.error(
           `Desktop screenshot failed for analyze job ${analyzeJobId}: ${(error as Error).message}`,
@@ -166,7 +176,13 @@ export class ScreenshotsProcessor extends BaseHeavyAnalyzeProcessor {
     try {
       return await this.withGatedContext(
         () => this.browserService.acquireContext(),
-        (context) => this.captureScreenshot(context, pageUrl, analyzeJobId, 'desktop'),
+        (context) =>
+          this.screenshotCapture.capture(
+            context,
+            pageUrl,
+            analyzeJobId,
+            'desktop',
+          ),
       );
     } catch (error) {
       this.logger.error(
@@ -183,71 +199,19 @@ export class ScreenshotsProcessor extends BaseHeavyAnalyzeProcessor {
     try {
       return await this.withGatedContext(
         () => this.browserService.acquireMobileContext(),
-        (context) => this.captureScreenshot(context, pageUrl, analyzeJobId, 'mobile'),
+        (context) =>
+          this.screenshotCapture.capture(
+            context,
+            pageUrl,
+            analyzeJobId,
+            'mobile',
+          ),
       );
     } catch (error) {
       this.logger.error(
         `Mobile screenshot failed for analyze job ${analyzeJobId}: ${(error as Error).message}`,
       );
       return null;
-    }
-  }
-
-  private async captureScreenshot(
-    context: BrowserContext,
-    url: string,
-    analyzeJobId: string,
-    type: 'desktop' | 'mobile',
-  ): Promise<ScreenshotEntry> {
-    const page = await context.newPage();
-    try {
-      await page.goto(url, { waitUntil: 'load' });
-
-      const dismissal = await this.blockerDismissalService
-        .dismissBlockers(page)
-        .catch((error: Error) => {
-          this.logger.warn(
-            `Blocker dismissal failed for analyze job ${analyzeJobId} (${type}): ${error.message}`,
-          );
-          return { dismissed: false, method: 'none' as const };
-        });
-      if (dismissal.dismissed) {
-        this.logger.log(
-          `Dismissed a page blocker for analyze job ${analyzeJobId} (${type}) via ${dismissal.method}`,
-        );
-      }
-
-      // Viewport-only, not the full scrolled page. animations: 'disabled'
-      // freezes CSS animations/transitions before capture - Playwright's
-      // screenshot always waits for a visually "stable" frame first
-      // regardless of this option, and that wait never converges on a page
-      // with continuously-running animations/video backgrounds (observed
-      // live: a 120s timeout on stripe.com). Freezing animations first lets
-      // the stability check succeed immediately.
-      const buffer = await page.screenshot({
-        fullPage: false,
-        type: 'png',
-        animations: 'disabled',
-      });
-      const uploaded = await this.cloudinaryService.uploadScreenshot(
-        buffer,
-        analyzeJobId,
-        type,
-      );
-      const takenAt = new Date().toISOString();
-
-      await this.prisma.screenshot.create({
-        data: {
-          analyzeJobId,
-          type: type === 'desktop' ? ScreenshotType.desktop : ScreenshotType.mobile,
-          cloudinaryUrl: uploaded.url,
-          cloudinaryPublicId: uploaded.publicId,
-        },
-      });
-
-      return { url: uploaded.url, cloudinaryPublicId: uploaded.publicId, takenAt };
-    } finally {
-      await page.close().catch(() => undefined);
     }
   }
 }

@@ -18,6 +18,5 @@ export interface AnalyzeWebhookFailedPayload {
 }
 
 export type AnalyzeWebhookPayload =
-  | AnalyzeWebhookCompletedPayload
-  | AnalyzeWebhookFailedPayload;
+  AnalyzeWebhookCompletedPayload | AnalyzeWebhookFailedPayload;
 export type AnalyzeWebhookEvent = AnalyzeWebhookPayload['event'];

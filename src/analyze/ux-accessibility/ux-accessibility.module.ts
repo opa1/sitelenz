@@ -8,7 +8,13 @@ import { UxAccessibilityController } from './ux-accessibility.controller';
 import { UxAccessibilityProcessor } from './ux-accessibility.processor';
 
 @Module({
-  imports: [AnalyzeModule, QueueModule, BrowserModule, UxAnalyzerModule, X402Module],
+  imports: [
+    AnalyzeModule,
+    QueueModule,
+    BrowserModule,
+    UxAnalyzerModule,
+    X402Module,
+  ],
   controllers: [UxAccessibilityController],
   providers: [UxAccessibilityProcessor],
 })

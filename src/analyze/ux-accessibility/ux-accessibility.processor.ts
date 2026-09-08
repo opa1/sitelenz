@@ -87,7 +87,8 @@ export class UxAccessibilityProcessor extends BaseHeavyAnalyzeProcessor {
       );
     } catch (error) {
       const err = error as Error & { code?: string };
-      const errorMessage = error instanceof Error ? error.message : String(error);
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
 
       this.logger.error(`${ENDPOINT} analyze job failed`, {
         analyzeJobId,
@@ -96,11 +97,13 @@ export class UxAccessibilityProcessor extends BaseHeavyAnalyzeProcessor {
         error: errorMessage,
       });
 
-      await this.failJob(analyzeJobId, err, stage).catch((updateError: Error) => {
-        this.logger.error(
-          `Failed to mark analyze job ${analyzeJobId} as failed: ${updateError.message}`,
-        );
-      });
+      await this.failJob(analyzeJobId, err, stage).catch(
+        (updateError: Error) => {
+          this.logger.error(
+            `Failed to mark analyze job ${analyzeJobId} as failed: ${updateError.message}`,
+          );
+        },
+      );
 
       await this.analyzeWebhookService
         .deliver(analyzeJobId, 'analyze.failed', {

@@ -15,11 +15,15 @@ export function sanitizeForJsonb<T>(value: T): T {
     return sanitizeString(value) as unknown as T;
   }
   if (Array.isArray(value)) {
-    return value.map((item) => sanitizeForJsonb(item)) as unknown as T;
+    return (value as unknown[]).map((item) =>
+      sanitizeForJsonb(item),
+    ) as unknown as T;
   }
   if (value !== null && typeof value === 'object') {
     const out: Record<string, unknown> = {};
-    for (const [key, item] of Object.entries(value as Record<string, unknown>)) {
+    for (const [key, item] of Object.entries(
+      value as Record<string, unknown>,
+    )) {
       out[key] = sanitizeForJsonb(item);
     }
     return out as T;

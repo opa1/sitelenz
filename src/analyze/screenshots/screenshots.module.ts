@@ -8,7 +8,13 @@ import { ScreenshotsController } from './screenshots.controller';
 import { ScreenshotsProcessor } from './screenshots.processor';
 
 @Module({
-  imports: [AnalyzeModule, QueueModule, BrowserModule, StorageModule, X402Module],
+  imports: [
+    AnalyzeModule,
+    QueueModule,
+    BrowserModule,
+    StorageModule,
+    X402Module,
+  ],
   controllers: [ScreenshotsController],
   providers: [ScreenshotsProcessor],
 })

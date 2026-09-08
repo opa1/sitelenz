@@ -68,7 +68,8 @@ export class SecurityProcessor extends BaseAnalyzeProcessor {
       this.logger.log(`Completed ${ENDPOINT} analyze job ${analyzeJobId}`);
     } catch (error) {
       const err = error as Error & { code?: string };
-      const errorMessage = error instanceof Error ? error.message : String(error);
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
 
       this.logger.error(`${ENDPOINT} analyze job failed`, {
         analyzeJobId,
@@ -77,11 +78,13 @@ export class SecurityProcessor extends BaseAnalyzeProcessor {
         error: errorMessage,
       });
 
-      await this.failJob(analyzeJobId, err, stage).catch((updateError: Error) => {
-        this.logger.error(
-          `Failed to mark analyze job ${analyzeJobId} as failed: ${updateError.message}`,
-        );
-      });
+      await this.failJob(analyzeJobId, err, stage).catch(
+        (updateError: Error) => {
+          this.logger.error(
+            `Failed to mark analyze job ${analyzeJobId} as failed: ${updateError.message}`,
+          );
+        },
+      );
 
       await this.analyzeWebhookService
         .deliver(analyzeJobId, 'analyze.failed', {
