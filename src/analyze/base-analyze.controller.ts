@@ -42,7 +42,6 @@ export interface CreateAnalyzeJobParams {
   url: string;
   webhookUrl?: string;
   endpoint: AnalyzeEndpoint;
-  price: number;
   req: FastifyRequest;
   /** ai-summary only - see AnalyzeJobData.findings. */
   findings?: Record<string, unknown>;

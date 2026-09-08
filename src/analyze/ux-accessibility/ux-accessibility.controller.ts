@@ -4,6 +4,7 @@ import {
   Get,
   HttpCode,
   HttpStatus,
+  NotFoundException,
   Param,
   Post,
   Req,
@@ -21,7 +22,6 @@ import type { FastifyReply, FastifyRequest } from 'fastify';
 import { SkipThrottle, Throttle } from '@nestjs/throttler';
 import { X402Guard } from '../../x402/x402.guard';
 import { SetAnalyzePrice } from '../../x402/analyze-price.decorator';
-import { ANALYZE_HEAVY_PRICE_USD } from '../../x402/x402.constants';
 import { BaseAnalyzeController } from '../base-analyze.controller';
 import { CreateAnalyzeJobDto } from '../dto/create-analyze-job.dto';
 import { AnalyzeJobCreatedResponseDto } from '../dto/analyze-job-created-response.dto';
@@ -40,7 +40,7 @@ export class UxAccessibilityController {
   @Post()
   @SkipThrottle({ 'analysis-create': false })
   @Throttle({ 'analysis-create': { limit: 10, ttl: 60_000 } })
-  @SetAnalyzePrice(ANALYZE_HEAVY_PRICE_USD)
+  @SetAnalyzePrice(ENDPOINT)
   @UseGuards(X402Guard)
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
@@ -102,9 +102,19 @@ export class UxAccessibilityController {
       url: dto.url,
       webhookUrl: dto.webhookUrl,
       endpoint: ENDPOINT,
-      price: ANALYZE_HEAVY_PRICE_USD,
       req,
     });
+  }
+
+  // The x402 Doctor (and the Bazaar discovery crawler) probes with a plain
+  // GET to see the 402 challenge before ever sending a real payment - same
+  // fix as the old /v1/analyses discovery route. The guard fires and throws
+  // 402 before this body ever runs.
+  @Get()
+  @SetAnalyzePrice(ENDPOINT)
+  @UseGuards(X402Guard)
+  discover(): never {
+    throw new NotFoundException();
   }
 
   @Get(':id')

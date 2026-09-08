@@ -47,6 +47,16 @@ export const envValidationSchema = Joi.object({
   MAX_CONCURRENT_ANALYSES: Joi.number().default(3),
   ANALYSIS_TIMEOUT_MS: Joi.number().default(120000),
 
-  X402_PRICE_STANDARD_USD: Joi.number().positive().default(1),
-  X402_PRICE_DEEP_USD: Joi.number().positive().default(2),
+  // Per-endpoint x402 prices (USD) - one var per /v1/analyze/* endpoint so
+  // pricing can change via env var + restart, with no code/redeploy needed.
+  ANALYZE_PRICE_TECHNOLOGY: Joi.number().positive().required(),
+  ANALYZE_PRICE_SEO: Joi.number().positive().required(),
+  ANALYZE_PRICE_SECURITY: Joi.number().positive().required(),
+  ANALYZE_PRICE_BUSINESS: Joi.number().positive().required(),
+  ANALYZE_PRICE_UX_ACCESSIBILITY: Joi.number().positive().required(),
+  ANALYZE_PRICE_SCREENSHOTS: Joi.number().positive().required(),
+  ANALYZE_PRICE_PERFORMANCE: Joi.number().positive().required(),
+  ANALYZE_PRICE_AI_SUMMARY: Joi.number().positive().required(),
+  ANALYZE_PRICE_STANDARD: Joi.number().positive().required(),
+  ANALYZE_PRICE_FULL: Joi.number().positive().required(),
 });

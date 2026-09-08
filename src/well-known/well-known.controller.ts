@@ -2,7 +2,7 @@ import { Controller, Get, Req } from '@nestjs/common';
 import { SkipThrottle } from '@nestjs/throttler';
 import type { FastifyRequest } from 'fastify';
 import { AppConfigService } from '../config';
-import { ANALYZE_ENDPOINT_CATALOG } from '../analyze/analyze-endpoint-catalog';
+import { withAnalyzePrices } from '../analyze/analyze-endpoint-catalog';
 import {
   ALGORAND_MAINNET_NETWORK,
   ALGORAND_TESTNET_NETWORK,
@@ -46,12 +46,10 @@ export class WellKnownController {
   constructor(private readonly appConfigService: AppConfigService) {}
 
   // Static discovery manifest for the GoPlausible x402 facilitator's Bazaar
-  // (https://facilitator.goplausible.xyz/guide/discovery): unlike the
-  // GET /v1/analyses probe route (which relies on a real payment being
-  // settled to auto-catalog a resource), this file lets an agent see every
-  // paid endpoint and its price up front, with no request required. Must be
-  // a real 200 JSON response at this exact path - the facilitator's crawler
-  // does not accept an SPA fallback.
+  // (https://facilitator.goplausible.xyz/guide/discovery): lets an agent see
+  // every paid endpoint and its price up front, with no request required.
+  // Must be a real 200 JSON response at this exact path - the facilitator's
+  // crawler does not accept an SPA fallback.
   @Get('x402')
   x402(@Req() request: FastifyRequest): X402DiscoveryDocument {
     const network =
@@ -62,7 +60,6 @@ export class WellKnownController {
     // Same absolute-URL construction as X402Guard's resourceInfo.url - relies
     // on Fastify's trustProxy (main.ts) to report the real public host.
     const origin = `${request.protocol}://${request.host}`;
-    const analysesUrl = `${origin}/v1/analyses`;
 
     const toAmount = (priceUsd: number): string =>
       String(Math.round(priceUsd * 10 ** USDC_DECIMALS));
@@ -71,29 +68,9 @@ export class WellKnownController {
       x402Version: 2,
       name: 'SiteLenz',
       description:
-        'Website intelligence API - automated performance, SEO, and content analysis with a full report.',
-      resources: [
-        {
-          url: analysesUrl,
-          method: 'POST',
-          description: `SiteLenz standard analysis - $${this.appConfigService.priceStandardUsd}. Body: {"url": "...", "analysis": "standard"}`,
-          network,
-          asset: networkConfig.usdcAssetId,
-          amount: toAmount(this.appConfigService.priceStandardUsd),
-          payTo: networkConfig.payToAddress,
-          extra: { tag: X402_GLOBAL_CHALLENGE_TAG },
-        },
-        {
-          url: analysesUrl,
-          method: 'POST',
-          description: `SiteLenz deep analysis - $${this.appConfigService.priceDeepUsd}. Body: {"url": "...", "analysis": "deep"}`,
-          network,
-          asset: networkConfig.usdcAssetId,
-          amount: toAmount(this.appConfigService.priceDeepUsd),
-          payTo: networkConfig.payToAddress,
-          extra: { tag: X402_GLOBAL_CHALLENGE_TAG },
-        },
-        ...ANALYZE_ENDPOINT_CATALOG.map(({ name, description, price }) => ({
+        'Website intelligence API - automated technology, SEO, security, performance, business, and UX analysis, individually or as a full report, with AI interpretation.',
+      resources: withAnalyzePrices(this.appConfigService).map(
+        ({ name, description, price }) => ({
           url: `${origin}/v1/analyze/${name}`,
           method: 'POST' as const,
           description: `${description} $${price}. Body: ${bodyHintFor(name)}`,
@@ -102,8 +79,8 @@ export class WellKnownController {
           amount: toAmount(price),
           payTo: networkConfig.payToAddress,
           extra: { tag: X402_GLOBAL_CHALLENGE_TAG },
-        })),
-      ],
+        }),
+      ),
     };
   }
 }

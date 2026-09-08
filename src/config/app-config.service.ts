@@ -95,11 +95,8 @@ export class AppConfigService {
     return this.configService.get('analysis', { infer: true }).timeoutMs;
   }
 
-  get priceStandardUsd(): number {
-    return this.configService.get('x402', { infer: true }).priceStandardUsd;
-  }
-
-  get priceDeepUsd(): number {
-    return this.configService.get('x402', { infer: true }).priceDeepUsd;
+  /** Fixed USD price per /v1/analyze/* endpoint, keyed by endpoint name. */
+  get analyzePrices(): Record<string, number> {
+    return this.configService.get('analyzePrices', { infer: true });
   }
 }

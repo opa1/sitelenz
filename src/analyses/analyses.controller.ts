@@ -1,27 +1,14 @@
 import { All, Controller, HttpCode } from '@nestjs/common';
-import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { ApiExcludeController } from '@nestjs/swagger';
 
-@ApiTags('analyses')
+// Permanently moved to /v1/analyze/* - excluded from Swagger entirely
+// (rather than documented+deprecated) since the migration is complete and
+// there's nothing here worth a caller reading about.
+@ApiExcludeController()
 @Controller('v1/analyses')
 export class AnalysesController {
   @All(['/', '*'])
   @HttpCode(301)
-  @ApiOperation({
-    summary: 'Moved permanently',
-    description: '/v1/analyses/* has moved permanently to /v1/analyze/*',
-    deprecated: true,
-  })
-  @ApiResponse({
-    status: 301,
-    description: 'This API has permanently moved to /v1/analyze/*',
-    schema: {
-      example: {
-        statusCode: 301,
-        message: 'This API has permanently moved to /v1/analyze/*',
-        documentation: '/docs',
-      },
-    },
-  })
   redirect() {
     return {
       statusCode: 301,

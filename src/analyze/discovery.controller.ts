@@ -1,7 +1,8 @@
 import { Controller, Get } from '@nestjs/common';
 import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { SkipThrottle } from '@nestjs/throttler';
-import { ANALYZE_ENDPOINT_CATALOG } from './analyze-endpoint-catalog';
+import { AppConfigService } from '../config';
+import { withAnalyzePrices } from './analyze-endpoint-catalog';
 
 interface AnalyzeEndpointSummary {
   path: string;
@@ -23,11 +24,13 @@ interface AnalyzeCatalogDocument {
 @ApiTags('analyze')
 @Controller('v1/analyze')
 export class DiscoveryController {
+  constructor(private readonly appConfigService: AppConfigService) {}
+
   @Get()
   @ApiOperation({
     summary: 'Catalog every /v1/analyze/* endpoint',
     description:
-      'Returns every analyze endpoint, its price, and its result path. No x402 payment required.',
+      'Returns every analyze endpoint, its current price, and its result path. No x402 payment required.',
   })
   @ApiResponse({
     status: 200,
@@ -50,14 +53,16 @@ export class DiscoveryController {
   })
   list(): AnalyzeCatalogDocument {
     return {
-      endpoints: ANALYZE_ENDPOINT_CATALOG.map(({ name, description, price }) => ({
-        path: `/v1/analyze/${name}`,
-        method: 'POST',
-        price: `$${price}`,
-        description,
-        async: true,
-        resultPath: `/v1/analyze/${name}/:id/result`,
-      })),
+      endpoints: withAnalyzePrices(this.appConfigService).map(
+        ({ name, description, price }) => ({
+          path: `/v1/analyze/${name}`,
+          method: 'POST',
+          price: `$${price}`,
+          description,
+          async: true,
+          resultPath: `/v1/analyze/${name}/:id/result`,
+        }),
+      ),
     };
   }
 }

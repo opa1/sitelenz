@@ -1,6 +1,6 @@
 # SiteLenz
 
-SiteLenz is a pay-per-request Website Intelligence API that accepts a URL and a single x402 payment of $1 (standard) or $2 (deep) on Algorand, then asynchronously crawls and analyzes the target website using Playwright, returning a structured JSON report covering technology stack, SEO, security headers, performance metrics, business signals, UX observations, and an AI-generated interpretation via Groq, delivered through a webhook or retrievable by polling.
+SiteLenz is a pay-per-request Website Intelligence API. Ten `/v1/analyze/*` endpoints each accept a URL (or, for `ai-summary`, pre-analyzed findings) behind a single x402 micropayment on Algorand, then asynchronously analyze the target and return structured JSON - individually (technology, SEO, security, business, performance, UX/accessibility, screenshots, AI summary) or as a composite report (`standard`, `full`) covering technology stack, SEO, security headers, performance metrics, business signals, UX observations, and an AI-generated interpretation via Groq - delivered through a webhook or retrievable by polling.
 
 Built for the [Algorand Global x402 Challenge](https://algorand.co/global-x402-challenge).
 
@@ -8,62 +8,59 @@ Built for the [Algorand Global x402 Challenge](https://algorand.co/global-x402-c
 
 ## How It Works
 
-1. A client sends `POST /v1/analyses` with `{ url, analysis, webhookUrl? }`.
-2. The URL is validated first - protocol allowlist, DNS resolution, and rejection of private/reserved/loopback addresses (SSRF protection) - before any payment is enforced, so an invalid or unsafe URL never charges the caller.
-3. If a completed analysis of the same URL and type already exists within the cache TTL, it is returned immediately with `cached: true` and no new payment or job is created.
-4. Otherwise the request must carry a `PAYMENT-SIGNATURE` header. If it is missing or invalid, the API responds `402 Payment Required` with the x402 payment requirements: an Algorand `exact`-scheme USDC transfer, priced per analysis type.
+1. A client discovers what's available via `GET /v1/analyze` (or `GET /.well-known/x402` for the x402 Bazaar manifest) - both list all ten endpoints with their current price and description.
+2. The client sends `POST /v1/analyze/{endpoint}` with `{ url, webhookUrl? }` (or `{ findings, url, webhookUrl? }` for `ai-summary`, which never crawls).
+3. For a URL-crawling endpoint, the URL is validated first - protocol allowlist, DNS resolution, and rejection of private/reserved/loopback addresses (SSRF protection) - before any payment is enforced, so an invalid or unsafe URL never charges the caller.
+4. The request must carry a `PAYMENT-SIGNATURE` header. If it is missing or invalid, the API responds `402 Payment Required` with the x402 payment requirements: an Algorand `exact`-scheme USDC transfer, priced per endpoint (`GET /v1/analyze/{endpoint}` returns the same 402 challenge with no side effects, for the x402 Doctor / Bazaar crawler to probe).
 5. The client signs the required USDC transfer (via any x402-compatible Algorand client, such as `@x402/core` + `@x402/avm`) and retries the same request with the `PAYMENT-SIGNATURE` header attached.
-6. The x402 guard verifies and settles the payment against the GoPlausible facilitator. Once settled, a job is enqueued on a BullMQ queue under a generated `sl_an_*` analysis id, and the request returns `200` immediately with `status: "queued"`.
-7. A worker process picks up the job: launches a Playwright browser context, crawls the page, runs a Lighthouse audit, captures a desktop screenshot (plus a mobile screenshot for deep analyses), and uploads screenshots to Cloudinary.
-8. Six analyzers run in sequence over the collected observations: Technology, SEO, Security, Performance, Business, and UX.
-9. The condensed analyzer output is sent to Groq for AI interpretation (summary, strengths/weaknesses, notable findings, recommendations). If the AI call fails, a fallback stub is stored instead of failing the whole analysis.
-10. The full report is persisted and the analysis status flips to `completed`. If a `webhookUrl` was supplied, an HMAC-signed webhook is enqueued for delivery (with automatic retries); regardless, the report becomes retrievable via `GET /v1/analyses/:id/report`.
+6. The x402 guard verifies and settles the payment against the GoPlausible facilitator. Once settled, a job is enqueued on that endpoint's own BullMQ queue under a generated `sl_aj_*` analyze-job id, and the request returns `200` immediately with `status: "queued"`.
+7. Before doing any work, the worker checks the crawl cache (`CrawlObservation`, keyed by normalized URL + crawl type, TTL-bound): lightweight endpoints (technology/seo/security/business) accept either a cached `lightweight` (plain HTTP fetch) or `full` (Playwright) observation; heavy endpoints (performance/ux-accessibility/screenshots/standard/full) require a `full` one. A prior heavy-endpoint crawl of the same URL therefore speeds up a subsequent lightweight call on it too, and repeat heavy/composite calls within the TTL skip re-launching a browser session entirely.
+8. On a cache miss, a lightweight job does a plain HTTP fetch + Cheerio parse (no browser); a heavy job launches a shared Playwright browser context, runs a Lighthouse audit, and (for `screenshots`/`standard`/`full`) captures and uploads a desktop screenshot (plus a mobile screenshot for `screenshots`/`full`) to Cloudinary.
+9. Individual endpoints run their one analyzer over the observations; `standard`/`full` run all six (Technology, SEO, Security, Performance, Business, UX) in sequence, `full` in deep mode.
+10. `standard`, `full`, and `ai-summary` send the condensed analyzer output (or, for `ai-summary`, the client-supplied findings) to Groq for AI interpretation (summary, strengths/weaknesses, notable findings, recommendations). If the AI call fails, a fallback stub is stored instead of failing the whole job.
+11. The result is persisted on the job and its status flips to `completed`. If a `webhookUrl` was supplied, an HMAC-signed webhook is enqueued for delivery (with automatic retries); regardless, the result becomes retrievable via `GET /v1/analyze/{endpoint}/:id/result`. A `failed` job can be re-queued via `POST /v1/analyze/{endpoint}/:id/retry`.
 
 ---
 
-## Analysis Tiers
+## Endpoints & Pricing
 
-| Analyzer | Standard ($1) | Deep ($2) |
-|---|---|---|
-| Technology | Framework/CMS/infrastructure/analytics/payments/CSS-framework/font detection with confidence scores | Adds `additionalLibraries` - inline and externally-loaded JS library detection |
-| SEO | Title, meta description, canonical, robots directives, Open Graph, Twitter Card, headings, image alt coverage, structured data, Lighthouse SEO score | Adds `robots.txt` audit, sitemap discovery, and hreflang detection |
-| Security | HTTPS/mixed-content check, security headers (HSTS, CSP, X-Content-Type-Options, X-Frame-Options, Referrer-Policy, Permissions-Policy), security score | Adds cookie flag audit (`Secure`/`HttpOnly`/`SameSite`) and TLS certificate inspection |
-| Performance | Lighthouse core metrics (LCP, CLS, FCP, TBT, TTFB, Speed Index), page weight, browser timing, image optimization, caching headers | Adds resource inventory (scripts/stylesheets/images/fonts) and third-party domain analysis |
-| Business | Business identity, contact/support/pricing signals, CTA detection, business model signals (SaaS/e-commerce/marketplace) | Adds all CTA texts, pricing links, nav/footer link maps, and product name extraction |
-| UX | Viewport config, navigation, forms, CTA presence, content/hero detection, accessibility audit | Adds mobile UX signals (responsive images, mobile menu, touch target issues) and reading experience metrics |
-| Screenshots | Desktop viewport only | Desktop + mobile viewport |
-| AI Interpretation | Groq-generated summary, strengths/weaknesses, recommendations within a standard token budget | Same fields with a larger token budget for a more detailed interpretation |
+| Endpoint | Price | Crawl | What it returns |
+|---|---|---|---|
+| `technology` | $0.01 | lightweight | Framework/CMS/CDN/analytics/payments/CSS-framework/font detection with confidence scores |
+| `seo` | $0.01 | lightweight | Title, meta description, canonical, robots directives, Open Graph, Twitter Card, headings, image alt coverage, structured data, Lighthouse SEO score |
+| `security` | $0.01 | lightweight | HTTPS/mixed-content check, security headers (HSTS, CSP, X-Content-Type-Options, X-Frame-Options, Referrer-Policy, Permissions-Policy), security score |
+| `business` | $0.01 | lightweight | Business identity, contact/support/pricing signals, CTA detection, business model signals (SaaS/e-commerce/marketplace) |
+| `performance` | $0.02 | heavy (Playwright + Lighthouse) | Core Web Vitals (LCP, CLS, FCP, TBT, TTFB), page weight, resource inventory, third-party domain analysis |
+| `ux-accessibility` | $0.01 | heavy | Viewport config, navigation, forms, CTA presence, content/hero detection, mobile UX, reading experience, Lighthouse accessibility audit |
+| `screenshots` | $0.01 | heavy | Desktop (1280x720) + mobile (390x844) viewport screenshots, uploaded to Cloudinary |
+| `ai-summary` | $0.05 | none (findings-only) | AI-generated summary/strengths/weaknesses/recommendations over client-supplied analyzer findings - never crawls a URL |
+| `standard` | $0.40 | heavy, all 6 analyzers | Full report: all six analyzers (non-deep), a desktop screenshot, and an AI interpretation |
+| `full` | $0.80 | heavy, all 6 analyzers (deep) | Everything in `standard`, plus deep-mode signals on every analyzer (JS dependency tree, robots.txt/sitemap/hreflang, TLS/cookie audit, resource inventory/third-party analysis, nav/footer/pricing extraction), a mobile screenshot, and an expanded AI interpretation |
+
+Prices are set via env vars (see [Environment Variables](#environment-variables)) and can change without a code deploy - just update the var and restart.
 
 ---
 
 ## API Reference
 
-### POST /v1/analyses
+Every `/v1/analyze/{endpoint}` route (all ten) follows the same four-route pattern:
 
-Queues a new analysis. Requires x402 payment.
+- **`POST /v1/analyze/{endpoint}`** - queues a job. Requires x402 payment. Body: `{ "url": "https://example.com", "webhookUrl": "https://myapp.com/webhooks/sitelenz" }` (`webhookUrl` optional; `ai-summary` additionally requires `findings`, see below).
+- **`GET /v1/analyze/{endpoint}`** - same x402 402 challenge as the `POST`, no side effects. Exists for the x402 Doctor / Bazaar discovery crawler, which always probes with `GET`.
+- **`GET /v1/analyze/{endpoint}/:id`** - job status/progress. No payment required.
+- **`GET /v1/analyze/{endpoint}/:id/result`** - the stored result once `status` is `completed`; `202` with a pending message otherwise. No payment required.
+- **`POST /v1/analyze/{endpoint}/:id/retry`** - re-queues a `failed` job. No payment required.
 
-Request body:
+### POST /v1/analyze/technology
 
-```json
-{
-  "url": "https://example.com",
-  "analysis": "standard",
-  "webhookUrl": "https://myapp.com/webhooks/sitelenz"
-}
-```
-
-- `url` - the website to analyze (required).
-- `analysis` - `"standard"` or `"deep"` (required); determines the price charged.
-- `webhookUrl` - HTTPS URL to notify on completion or failure (optional).
-
-Response - `200 OK` (payment settled, job queued or cached result returned):
+Response - `200 OK` (payment settled, job queued):
 
 ```json
 {
-  "analysisId": "sl_an_01j8z9k3n8v5w6x7y8z9a0b1c2",
+  "analyzeJobId": "sl_aj_01j8z9k3n8v5w6x7y8z9a0b1c2",
   "status": "queued",
-  "analysis": "standard",
-  "createdAt": "2026-09-03T12:00:00.000Z"
+  "endpoint": "technology",
+  "createdAt": "2026-09-08T12:00:00.000Z"
 }
 ```
 
@@ -74,8 +71,8 @@ Response - `402 Payment Required` (no or invalid `PAYMENT-SIGNATURE` header):
   "x402Version": 2,
   "error": "Payment required",
   "resource": {
-    "url": "https://api.sitelenz.dev/v1/analyses",
-    "description": "SiteLenz standard analysis",
+    "url": "https://api.sitelenz.online/v1/analyze/technology",
+    "description": "SiteLenz technology analysis",
     "mimeType": "application/json"
   },
   "accepts": [
@@ -83,7 +80,7 @@ Response - `402 Payment Required` (no or invalid `PAYMENT-SIGNATURE` header):
       "scheme": "exact",
       "network": "algorand:SGO1GKSzyE7IEPItTxCByw9x8FmnrCDexi9/cOUJOiI=",
       "asset": "10458941",
-      "amount": "1000000",
+      "amount": "10000",
       "payTo": "RECEIVER_ALGORAND_ADDRESS",
       "maxTimeoutSeconds": 60,
       "extra": {
@@ -95,57 +92,90 @@ Response - `402 Payment Required` (no or invalid `PAYMENT-SIGNATURE` header):
 }
 ```
 
-Full x402 flow with curl:
+Full x402 flow with curl (same pattern for every endpoint - swap the path and, for `standard`/`full`/`performance`, expect a longer time-to-completion since those launch a browser):
 
 ```bash
 # 1. Initial request - no payment attached, gets 402 back
-curl -i -X POST https://api.sitelenz.dev/v1/analyses \
+curl -i -X POST https://api.sitelenz.online/v1/analyze/technology \
   -H "Content-Type: application/json" \
-  -d '{"url":"https://example.com","analysis":"standard"}'
+  -d '{"url":"https://example.com"}'
 
 # 2. Sign the payment described in the 402 response using an x402-compatible
 #    Algorand client, then retry with the signed payload attached
-curl -i -X POST https://api.sitelenz.dev/v1/analyses \
+curl -i -X POST https://api.sitelenz.online/v1/analyze/technology \
   -H "Content-Type: application/json" \
   -H "PAYMENT-SIGNATURE: <base64-encoded signed payment payload>" \
-  -d '{"url":"https://example.com","analysis":"standard"}'
+  -d '{"url":"https://example.com"}'
 ```
 
-### GET /v1/analyses/:id
+### POST /v1/analyze/ai-summary
 
-Returns current status and progress.
+The one endpoint that doesn't crawl. Body:
 
 ```json
 {
-  "analysisId": "sl_an_01j8z9k3n8v5w6x7y8z9a0b1c2",
+  "url": "https://example.com",
+  "findings": {
+    "seo": { "title": { "present": true, "length": 15 }, "lighthouseSeoScore": 88 },
+    "security": { "securityScore": 45, "https": { "enabled": true } }
+  },
+  "webhookUrl": "https://myapp.com/webhooks/sitelenz"
+}
+```
+
+`findings` is freeform - any subset of `technology`/`seo`/`security`/`performance`/`business`/`ux` analyzer output. At least one key is required, or the request fails `400 INSUFFICIENT_FINDINGS`. `url` is structurally validated but never fetched, so this is the one endpoint where an unreachable or private-IP URL doesn't matter.
+
+### GET /v1/analyze/{endpoint}/:id
+
+```json
+{
+  "analyzeJobId": "sl_aj_01j8z9k3n8v5w6x7y8z9a0b1c2",
+  "endpoint": "technology",
   "status": "running",
-  "analysis": "standard",
-  "progress": "analyzing",
-  "createdAt": "2026-09-03T12:00:00.000Z",
+  "progressStage": "analyzing",
+  "createdAt": "2026-09-08T12:00:00.000Z",
   "completedAt": null
 }
 ```
 
-`status` is one of: `queued`, `running`, `completed`, `failed`, `expired`.
-`progress` is a finer-grained stage string while `status` is `running`: `launching_browser`, `fetching_website`, `rendering`, `taking_screenshot`, `analyzing`, `ai_analysis`, `storing_results`, `sending_webhook`, `completed`, or `failed`.
+`status` is one of: `queued`, `running`, `completed`, `failed`. `progressStage` is a finer-grained stage string while `status` is `running` - stage names vary by endpoint (e.g. `resolving_observations`, `analyzing`, `taking_screenshots`, `ai_analysis`, `storing_results`, `sending_webhook`).
 
-### GET /v1/analyses/:id/report
+### GET /v1/analyze/{endpoint}/:id/result
 
-No payment required - the analysis was already paid for at creation.
+No payment required - the job was already paid for at creation.
 
-Response - `200 OK` once the analysis has completed: the full report object (see [Report Structure](#report-structure)).
+Response - `200 OK` once the job has completed: the endpoint's result object (see [Result Shapes](#result-shapes)).
 
 Response - `202 Accepted` while queued, running, or if it failed:
 
 ```json
 {
-  "analysisId": "sl_an_01j8z9k3n8v5w6x7y8z9a0b1c2",
+  "analyzeJobId": "sl_aj_01j8z9k3n8v5w6x7y8z9a0b1c2",
   "status": "running",
-  "message": "Analysis is not yet complete"
+  "message": "Analysis not yet complete"
 }
 ```
 
 Response - `404 Not Found` if the id does not exist.
+
+### GET /v1/analyze
+
+Catalog of all ten endpoints - no payment required. Lets an agent discover what's available without reading Swagger.
+
+```json
+{
+  "endpoints": [
+    {
+      "path": "/v1/analyze/technology",
+      "method": "POST",
+      "price": "$0.01",
+      "description": "Detects frontend frameworks, CMS, CDN, analytics, payment providers, CSS libraries, and fonts from HTTP headers, DOM markers, and script analysis.",
+      "async": true,
+      "resultPath": "/v1/analyze/technology/:id/result"
+    }
+  ]
+}
+```
 
 ### GET /health
 
@@ -154,7 +184,9 @@ Response - `404 Not Found` if the id does not exist.
   "status": "ok",
   "network": "testnet",
   "version": "0.0.1",
-  "timestamp": "2026-09-03T12:00:00.000Z"
+  "timestamp": "2026-09-08T12:00:00.000Z",
+  "architecture": "v2",
+  "endpoints": 10
 }
 ```
 
@@ -188,14 +220,11 @@ client.register(
 const http = new x402HTTPClient(client);
 
 async function analyzeUrl(url) {
-  const body = JSON.stringify({ url, analysis: 'standard' });
+  const endpoint = 'https://api.sitelenz.online/v1/analyze/technology';
+  const body = JSON.stringify({ url });
   const headers = { 'Content-Type': 'application/json' };
 
-  let res = await fetch('https://api.sitelenz.dev/v1/analyses', {
-    method: 'POST',
-    headers,
-    body,
-  });
+  let res = await fetch(endpoint, { method: 'POST', headers, body });
 
   if (res.status === 402) {
     const paymentRequired = http.getPaymentRequiredResponse(
@@ -205,7 +234,7 @@ async function analyzeUrl(url) {
     const paymentPayload = await client.createPaymentPayload(paymentRequired);
     const paymentHeaders = http.encodePaymentSignatureHeader(paymentPayload);
 
-    res = await fetch('https://api.sitelenz.dev/v1/analyses', {
+    res = await fetch(endpoint, {
       method: 'POST',
       headers: { ...headers, ...paymentHeaders },
       body,
@@ -216,174 +245,103 @@ async function analyzeUrl(url) {
 }
 ```
 
-An AI agent integrating against SiteLenz follows the same pattern: attempt the request, catch the `402`, sign and attach payment, retry once. No manual wallet interaction is required once a signer is configured.
+An AI agent integrating against SiteLenz follows the same pattern: attempt the request, catch the `402`, sign and attach payment, retry once. No manual wallet interaction is required once a signer is configured. An agent that wants to discover endpoints and prices programmatically first can hit `GET /v1/analyze` or `GET /.well-known/x402` rather than reading this document.
 
 ---
 
-## Report Structure
+## Result Shapes
+
+Each single-analyzer endpoint (`technology`, `seo`, `security`, `business`, `performance`, `ux-accessibility`) returns just that analyzer's own object - e.g. `GET /v1/analyze/technology/:id/result`:
 
 ```json
 {
-  "analysisId": "sl_an_01j8z9k3n8v5w6x7y8z9a0b1c2",
+  "technologies": [
+    {
+      "name": "Nginx",
+      "category": "infrastructure",
+      "confidence": 0.9,
+      "evidence": ["Server response header: nginx"]
+    }
+  ]
+}
+```
+
+`screenshots` returns:
+
+```json
+{
+  "desktop": {
+    "url": "https://res.cloudinary.com/demo/image/upload/v1/sitelenz/screenshots/sl_aj_xxx/sl_aj_xxx-desktop.png",
+    "cloudinaryPublicId": "sitelenz/screenshots/sl_aj_xxx/sl_aj_xxx-desktop",
+    "takenAt": "2026-09-08T12:00:45.000Z"
+  },
+  "mobile": {
+    "url": "https://res.cloudinary.com/demo/image/upload/v1/sitelenz/screenshots/sl_aj_xxx/sl_aj_xxx-mobile.png",
+    "cloudinaryPublicId": "sitelenz/screenshots/sl_aj_xxx/sl_aj_xxx-mobile",
+    "takenAt": "2026-09-08T12:00:47.000Z"
+  }
+}
+```
+
+`ai-summary` returns:
+
+```json
+{
+  "url": "https://example.com/",
+  "aiResult": {
+    "summary": "...",
+    "strengths": ["..."],
+    "weaknesses": ["..."],
+    "notableFindings": ["..."],
+    "technicalInterpretation": "...",
+    "businessInterpretation": "...",
+    "recommendations": [{ "priority": "medium", "category": "security", "finding": "..." }],
+    "modelUsed": "openai/gpt-oss-120b",
+    "interpretedAt": "2026-09-08T12:00:42.000Z"
+  },
+  "interpretedAt": "2026-09-08T12:00:42.000Z"
+}
+```
+
+`standard` and `full` return the composite report - every analyzer section, `screenshots` (desktop only for `standard`; desktop + mobile for `full`), `ai`, and `metadata`:
+
+```json
+{
+  "analyzeJobId": "sl_aj_01j8z9k3n8v5w6x7y8z9a0b1c2",
   "url": "https://example.com",
-  "analysisType": "standard",
+  "endpoint": "full",
   "website": {
     "finalUrl": "https://example.com/",
     "statusCode": 200,
     "redirectChain": []
   },
-  "technology": {
-    "technologies": [
-      {
-        "name": "Nginx",
-        "category": "infrastructure",
-        "confidence": 0.9,
-        "evidence": ["Server response header: nginx"]
-      },
-      {
-        "name": "IANA static hosting",
-        "category": "infrastructure",
-        "confidence": 0.4,
-        "evidence": ["Minimal boilerplate HTML with no framework markers"]
-      }
-    ]
-  },
-  "seo": {
-    "title": {
-      "present": true,
-      "value": "Example Domain",
-      "length": 14,
-      "issues": ["too_short"]
-    },
-    "metaDescription": {
-      "present": false,
-      "value": null,
-      "length": 0,
-      "issues": ["missing"]
-    },
-    "canonical": { "present": false, "value": null, "matchesCurrentUrl": false },
-    "robots": {
-      "meta": null,
-      "header": null,
-      "indexable": true
-    },
-    "headings": {
-      "h1Count": 1,
-      "h2Count": 0,
-      "h1Values": ["Example Domain"],
-      "issues": []
-    },
-    "images": {
-      "total": 0,
-      "withAlt": 0,
-      "withEmptyAlt": 0,
-      "missingAlt": 0,
-      "altCoveragePercent": 100
-    },
-    "lighthouseSeoScore": 82
-  },
-  "security": {
-    "https": { "enabled": true, "mixedContent": false },
-    "headers": {
-      "strictTransportSecurity": {
-        "present": false,
-        "maxAge": null,
-        "includeSubDomains": false,
-        "preload": false,
-        "score": "missing"
-      },
-      "contentSecurityPolicy": {
-        "present": false,
-        "value": null,
-        "hasUnsafeInline": false,
-        "hasUnsafeEval": false,
-        "score": "missing"
-      },
-      "xFrameOptions": { "present": false, "value": null, "score": "missing" }
-    },
-    "securityScore": 45
-  },
-  "performance": {
-    "lighthouse": {
-      "performanceScore": 97,
-      "accessibilityScore": 88,
-      "lcp": { "value": 820, "score": "good" },
-      "cls": { "value": 0.01, "score": "good" },
-      "ttfb": { "value": 210, "score": "good" }
-    },
-    "pageWeight": {
-      "totalRequests": 3,
-      "totalSizeBytes": 6482,
-      "totalSizeKb": 6.3,
-      "byType": { "document": 1, "stylesheet": 1, "image": 1 }
-    },
-    "timing": { "domContentLoadedMs": 180, "loadCompleteMs": 240 },
-    "caching": { "present": true, "value": "max-age=604800", "hasMaxAge": true }
-  },
-  "business": {
-    "businessName": { "value": "Example", "source": "inferred" },
-    "pageTitle": "Example Domain",
-    "description": { "value": null, "source": "unknown" },
-    "language": "en",
-    "email": [],
-    "phone": [],
-    "socialLinks": [],
-    "hasContactPage": false,
-    "hasSupportPage": false,
-    "hasPricing": false,
-    "hasFreeTrialSignal": false,
-    "hasEnterpriseSignal": false,
-    "primaryCta": "More information...",
-    "ctaUrl": "https://www.iana.org/domains/example",
-    "businessModel": {
-      "hasSaasSignals": { "value": false, "source": "inferred" },
-      "hasEcommerceSignals": { "value": false, "source": "inferred" },
-      "hasMarketplaceSignals": { "value": false, "source": "inferred" }
-    }
-  },
-  "ux": {
-    "viewport": { "hasViewportMeta": true, "viewportContent": "width=device-width, initial-scale=1" },
-    "navigation": { "hasNav": false, "navItemCount": 0, "hasHamburgerSignal": false },
-    "forms": { "formCount": 0, "hasSearchForm": false, "hasLoginForm": false, "hasNewsletterSignal": false },
-    "cta": { "present": true, "count": 1 },
-    "content": { "hasHeroSection": false, "wordCount": 28 },
-    "accessibility": { "score": 88, "audits": [] }
-  },
+  "technology": { "technologies": [], "additionalLibraries": [] },
+  "seo": { "title": { "present": true, "value": "Example Domain", "length": 14, "issues": ["too_short"] }, "robotsTxt": { "present": true, "allowsIndexing": true } },
+  "security": { "https": { "enabled": true, "mixedContent": false }, "securityScore": 65, "tlsCertificate": { "valid": true, "daysUntilExpiry": 72 } },
+  "performance": { "lighthouse": { "performanceScore": 97, "accessibilityScore": 88 }, "resourceInventory": {}, "thirdParty": { "domains": [], "percent": 0 } },
+  "business": { "businessName": { "value": "Example", "source": "inferred" }, "pricingLinks": [] },
+  "ux": { "viewport": { "hasViewportMeta": true }, "mobile": { "mobileViewportConfigured": true } },
   "ai": {
-    "summary": "A minimal static placeholder page with no framework, tracking, or business functionality - suitable as a documentation example but not representative of a production site.",
-    "strengths": ["Fast load time", "Valid HTTPS with no mixed content"],
-    "weaknesses": ["No security headers configured", "No meta description for search snippets"],
-    "notableFindings": ["Page is IANA's example.com placeholder domain"],
-    "technicalInterpretation": "Server responds with minimal headers and no CSP/HSTS; page weight is negligible at under 7KB.",
-    "businessInterpretation": "No discoverable business signals - appears to be a reference/test domain rather than a live business site.",
-    "recommendations": [
-      {
-        "priority": "medium",
-        "category": "security",
-        "finding": "Add a Content-Security-Policy and Strict-Transport-Security header."
-      },
-      {
-        "priority": "low",
-        "category": "seo",
-        "finding": "Add a meta description to improve search result snippets."
-      }
-    ],
+    "summary": "...",
+    "strengths": ["..."],
+    "weaknesses": ["..."],
+    "recommendations": [],
     "modelUsed": "openai/gpt-oss-120b",
-    "interpretedAt": "2026-09-03T12:00:42.000Z"
+    "interpretedAt": "2026-09-08T12:00:42.000Z"
   },
-  "screenshots": [
-    {
-      "type": "desktop",
-      "url": "https://res.cloudinary.com/demo/image/upload/v1/sitelenz/sl_an_01j8z9k3n8v5w6x7y8z9a0b1c2/desktop.png",
-      "blockerDismissed": false
-    }
-  ],
+  "screenshots": {
+    "desktop": { "url": "https://res.cloudinary.com/...", "cloudinaryPublicId": "...", "takenAt": "..." },
+    "mobile": { "url": "https://res.cloudinary.com/...", "cloudinaryPublicId": "...", "takenAt": "..." }
+  },
   "metadata": {
-    "analysisCompletedAt": "2026-09-03T12:00:45.000Z",
-    "analysisDurationMs": 18234
+    "completedAt": "2026-09-08T12:00:45.000Z",
+    "durationMs": 18234,
+    "cacheHit": false
   }
 }
 ```
+
+`additionalLibraries` (technology), `robotsTxt`/`sitemap`/`hreflang` (seo), `tlsCertificate`/cookie audit (security), `resourceInventory`/`thirdParty` (performance), pricing/nav/footer links (business), and `mobile`/reading-experience signals (ux) are only populated in deep mode, i.e. by `full` - `standard` omits them.
 
 ---
 
@@ -425,7 +383,7 @@ An AI agent integrating against SiteLenz follows the same pattern: attempt the r
 
 | Variable | Description |
 |---|---|
-| `REDIS_URL` | Redis connection string used by BullMQ for the analysis and webhook queues |
+| `REDIS_URL` | Redis connection string used by BullMQ for the per-endpoint analyze queues, the analyze-webhook queue, and the legacy analysis/webhook queues |
 
 ### Algorand / x402 (Testnet)
 
@@ -465,11 +423,26 @@ An AI agent integrating against SiteLenz follows the same pattern: attempt the r
 | Variable | Description |
 |---|---|
 | `WEBHOOK_SECRET` | Secret used to HMAC-sign outgoing webhook deliveries |
-| `ANALYSIS_CACHE_TTL_HOURS` | How long a completed analysis is served from cache before it expires (default `48`) |
-| `MAX_CONCURRENT_ANALYSES` | Max analyses processed concurrently by the worker (default `3`) |
-| `ANALYSIS_TIMEOUT_MS` | Per-analysis timeout in milliseconds (default `120000`) |
-| `X402_PRICE_STANDARD_USD` | Price in USD charged for a standard analysis (default `1`) |
-| `X402_PRICE_DEEP_USD` | Price in USD charged for a deep analysis (default `2`) |
+| `ANALYSIS_CACHE_TTL_HOURS` | How long a crawl observation is served from cache before it expires (default `48`) |
+| `MAX_CONCURRENT_ANALYSES` | Max heavy (Playwright) jobs processed concurrently across all browser-backed endpoints (default `3`) |
+| `ANALYSIS_TIMEOUT_MS` | Per-crawl timeout in milliseconds (default `120000`) |
+
+### Endpoint Pricing (USD)
+
+One var per `/v1/analyze/*` endpoint. Change the value and restart to reprice an endpoint - no code change needed.
+
+| Variable | Description |
+|---|---|
+| `ANALYZE_PRICE_TECHNOLOGY` | Price for `POST /v1/analyze/technology` (suggested `0.01`) |
+| `ANALYZE_PRICE_SEO` | Price for `POST /v1/analyze/seo` (suggested `0.01`) |
+| `ANALYZE_PRICE_SECURITY` | Price for `POST /v1/analyze/security` (suggested `0.01`) |
+| `ANALYZE_PRICE_BUSINESS` | Price for `POST /v1/analyze/business` (suggested `0.01`) |
+| `ANALYZE_PRICE_UX_ACCESSIBILITY` | Price for `POST /v1/analyze/ux-accessibility` (suggested `0.01`) |
+| `ANALYZE_PRICE_SCREENSHOTS` | Price for `POST /v1/analyze/screenshots` (suggested `0.01`) |
+| `ANALYZE_PRICE_PERFORMANCE` | Price for `POST /v1/analyze/performance` (suggested `0.02`) |
+| `ANALYZE_PRICE_AI_SUMMARY` | Price for `POST /v1/analyze/ai-summary` (suggested `0.05`) |
+| `ANALYZE_PRICE_STANDARD` | Price for `POST /v1/analyze/standard` (suggested `0.40`) |
+| `ANALYZE_PRICE_FULL` | Price for `POST /v1/analyze/full` (suggested `0.80`) |
 
 ---
 
@@ -501,7 +474,7 @@ An AI agent integrating against SiteLenz follows the same pattern: attempt the r
    npm run start:dev
    ```
 
-5. Open `http://localhost:3000/docs` for the interactive Swagger UI.
+5. Open `http://localhost:3000/docs` for the interactive Swagger UI, or `http://localhost:3000/v1/analyze` for the plain-JSON endpoint catalog.
 
 ---
 

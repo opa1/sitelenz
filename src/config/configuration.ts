@@ -63,10 +63,14 @@ export interface AppConfiguration {
     maxConcurrentAnalyses: number;
     timeoutMs: number;
   };
-  x402: {
-    priceStandardUsd: number;
-    priceDeepUsd: number;
-  };
+  /**
+   * Fixed USD price per /v1/analyze/* endpoint, keyed by endpoint name
+   * (matches AnalyzeEndpoint in src/analyze/analyze-job.interface.ts - kept
+   * as a plain Record here rather than importing that type, so config stays
+   * a leaf module with no dependency on feature code). Read by X402Guard via
+   * the endpoint name each @SetAnalyzePrice-decorated route declares.
+   */
+  analyzePrices: Record<string, number>;
 }
 
 export default (): AppConfiguration => ({
@@ -110,8 +114,16 @@ export default (): AppConfiguration => ({
     maxConcurrentAnalyses: Number(process.env.MAX_CONCURRENT_ANALYSES ?? 3),
     timeoutMs: Number(process.env.ANALYSIS_TIMEOUT_MS ?? 120000),
   },
-  x402: {
-    priceStandardUsd: Number(process.env.X402_PRICE_STANDARD_USD ?? 1),
-    priceDeepUsd: Number(process.env.X402_PRICE_DEEP_USD ?? 2),
+  analyzePrices: {
+    technology: Number(process.env.ANALYZE_PRICE_TECHNOLOGY),
+    seo: Number(process.env.ANALYZE_PRICE_SEO),
+    security: Number(process.env.ANALYZE_PRICE_SECURITY),
+    business: Number(process.env.ANALYZE_PRICE_BUSINESS),
+    'ux-accessibility': Number(process.env.ANALYZE_PRICE_UX_ACCESSIBILITY),
+    screenshots: Number(process.env.ANALYZE_PRICE_SCREENSHOTS),
+    performance: Number(process.env.ANALYZE_PRICE_PERFORMANCE),
+    'ai-summary': Number(process.env.ANALYZE_PRICE_AI_SUMMARY),
+    standard: Number(process.env.ANALYZE_PRICE_STANDARD),
+    full: Number(process.env.ANALYZE_PRICE_FULL),
   },
 });

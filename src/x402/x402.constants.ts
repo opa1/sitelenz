@@ -20,24 +20,6 @@ export const X402_MAX_TIMEOUT_SECONDS = 60;
  */
 export const X402_GLOBAL_CHALLENGE_TAG = 'x402-global-challenge';
 
-/** Fixed USD price for every lightweight (no-browser) /v1/analyze/* endpoint. */
-export const ANALYZE_LIGHTWEIGHT_PRICE_USD = 0.01;
-
-/** Fixed USD price for the ux-accessibility and screenshots (heavy, browser-backed) endpoints. */
-export const ANALYZE_HEAVY_PRICE_USD = 0.01;
-
-/** Fixed USD price for the performance (heavy, browser-backed + Lighthouse) endpoint. */
-export const ANALYZE_PERFORMANCE_PRICE_USD = 0.02;
-
-/** Fixed USD price for the ai-summary (findings-only, no crawl) endpoint. */
-export const ANALYZE_AI_SUMMARY_PRICE_USD = 0.05;
-
-/** Fixed USD price for the standard composite (all 6 analyzers + desktop screenshot + AI) endpoint. */
-export const ANALYZE_STANDARD_PRICE_USD = 0.4;
-
-/** Fixed USD price for the full composite (deep mode + desktop/mobile screenshots + AI) endpoint. */
-export const ANALYZE_FULL_PRICE_USD = 0.8;
-
 /**
  * Algorand CAIP-2 network ids, built from the full genesis hash rather than
  * @x402/avm's own shortened `ALGORAND_*_CAIP2` exports. The live GoPlausible

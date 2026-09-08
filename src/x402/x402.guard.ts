@@ -1,13 +1,12 @@
 import {
-  BadRequestException,
   CanActivate,
   ExecutionContext,
   Inject,
   Injectable,
+  InternalServerErrorException,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import type { FastifyReply, FastifyRequest } from 'fastify';
-import { AnalysisType } from '@prisma/client';
 import type { x402ResourceServer, ResourceConfig } from '@x402/core/server';
 import type { PaymentPayload } from '@x402/core/types';
 import {
@@ -23,9 +22,16 @@ import {
   X402_PAYMENT_HEADER,
   X402_RESOURCE_SERVER,
 } from './x402.constants';
-import { ANALYZE_PRICE_KEY } from './analyze-price.decorator';
+import { ANALYZE_ENDPOINT_KEY } from './analyze-price.decorator';
 import { X402PaymentRequiredException } from './exceptions/x402-payment-required.exception';
 
+/**
+ * Every route this guard protects is one of the /v1/analyze/* endpoints and
+ * declares its endpoint name via @SetAnalyzePrice - the legacy /v1/analyses
+ * body-shape ("analysis": "standard"/"deep") pricing path this guard used
+ * to also support was removed once that controller became a plain 301
+ * redirect with no guard attached at all.
+ */
 @Injectable()
 export class X402Guard implements CanActivate {
   constructor(
@@ -38,28 +44,21 @@ export class X402Guard implements CanActivate {
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest<FastifyRequest>();
 
-    const body = request.body as Record<string, unknown> | undefined;
-    const analysisType = body?.['analysis'];
-    // /v1/analyze/* routes declare a fixed price via @SetAnalyzePrice
-    // instead of the legacy /v1/analyses body's "analysis" (standard/deep)
-    // field - check that first and skip resolvePrice's body validation
-    // entirely when present.
-    const analyzePrice = this.reflector.getAllAndOverride<number | undefined>(
-      ANALYZE_PRICE_KEY,
+    const analyzeEndpoint = this.reflector.getAllAndOverride<string | undefined>(
+      ANALYZE_ENDPOINT_KEY,
       [context.getHandler(), context.getClass()],
     );
-    // Discovery probes (x402 Bazaar's doctor) hit this route with a plain,
-    // bodyless GET just to see the 402 challenge - there's no "analysis"
-    // field to resolve a price from, so resolvePrice's strict validation
-    // (correct for POST's real body) doesn't apply here. Any real payment
-    // still fails matching below since resourceConfig.price won't match
-    // what the caller signed for a non-existent GET-priced resource.
-    const priceUsd =
-      analyzePrice !== undefined
-        ? analyzePrice
-        : request.method === 'GET'
-          ? this.appConfigService.priceStandardUsd
-          : this.resolvePrice(analysisType);
+    if (!analyzeEndpoint) {
+      throw new InternalServerErrorException(
+        'X402Guard applied to a route with no @SetAnalyzePrice endpoint',
+      );
+    }
+    const priceUsd = this.appConfigService.analyzePrices[analyzeEndpoint];
+    if (priceUsd === undefined) {
+      throw new InternalServerErrorException(
+        `No configured price for analyze endpoint "${analyzeEndpoint}"`,
+      );
+    }
 
     const network =
       this.appConfigService.network === 'mainnet'
@@ -84,11 +83,6 @@ export class X402Guard implements CanActivate {
       },
     };
 
-    // /v1/analyze/{endpoint}/... - pulled from the URL (not injected as a
-    // decorator arg) purely to build a human-readable description/example;
-    // falls back to a generic label if the path shape ever changes.
-    const analyzeEndpointName = request.url.match(/\/v1\/analyze\/([a-z-]+)/)?.[1];
-
     const requirements =
       await this.resourceServer.buildPaymentRequirements(resourceConfig);
     const resourceInfo = {
@@ -99,12 +93,7 @@ export class X402Guard implements CanActivate {
       // `request.host` (not `.hostname`) - hostname alone drops the port,
       // which broke locally on any non-default port.
       url: `${request.protocol}://${request.host}${request.url}`,
-      description:
-        analyzePrice !== undefined
-          ? `SiteLenz ${analyzeEndpointName ?? 'website'} analysis`
-          : request.method === 'GET'
-            ? 'SiteLenz website analysis'
-            : `SiteLenz ${String(analysisType)} analysis`,
+      description: `SiteLenz ${analyzeEndpoint} analysis`,
       mimeType: 'application/json',
     };
 
@@ -127,80 +116,26 @@ export class X402Guard implements CanActivate {
     // settles were happening (confirmed via a live Doctor report against
     // api.sitelenz.online). The extension describes the real paid action
     // (POST's body/response shape) regardless of which method fetched the
-    // challenge.
-    const bazaarExtension = analyzePrice !== undefined
-      ? {
-          bazaar: {
-            info: {
-              input: {
-                type: 'http',
-                method: 'POST',
-                bodyType: 'json',
-                body: { url: 'https://example.com' },
-              },
-              output: {
-                type: 'json',
-                example: {
-                  analyzeJobId: 'sl_aj_01j8z9k3n8v5w6x7y8z9a0b1c2',
-                  status: 'queued',
-                  endpoint: analyzeEndpointName ?? 'technology',
-                  createdAt: '2026-09-08T12:00:00.000Z',
-                },
-              },
-            },
-            schema: {
-              $schema: 'https://json-schema.org/draft/2020-12/schema',
-              type: 'object',
-              required: ['input'],
-              properties: {
-                input: {
-                  type: 'object',
-                  required: ['url'],
-                  properties: {
-                    url: {
-                      type: 'string',
-                      format: 'uri',
-                      description: 'The website URL to analyze',
-                    },
-                    webhookUrl: {
-                      type: 'string',
-                      format: 'uri',
-                      description: 'HTTPS URL to notify when the job completes',
-                    },
-                  },
-                },
-                output: {
-                  type: 'object',
-                  properties: {
-                    analyzeJobId: { type: 'string' },
-                    status: {
-                      type: 'string',
-                      enum: ['queued', 'running', 'completed', 'failed'],
-                    },
-                    endpoint: { type: 'string' },
-                    createdAt: { type: 'string', format: 'date-time' },
-                  },
-                },
-              },
-            },
-          },
-        }
-      : {
+    // challenge. Every /v1/analyze/* route shares the same generic
+    // {url, webhookUrl?} -> {analyzeJobId, status, endpoint, createdAt}
+    // shape (ai-summary's extra `findings` field is documented on its own
+    // route in Swagger, not here).
+    const bazaarExtension = {
       bazaar: {
         info: {
           input: {
             type: 'http',
             method: 'POST',
             bodyType: 'json',
-            body: { url: 'https://example.com', analysis: 'standard' },
+            body: { url: 'https://example.com' },
           },
           output: {
             type: 'json',
             example: {
-              analysisId: 'sl_an_01j8z9k3n8v5w6x7y8z9a0b1c2',
+              analyzeJobId: 'sl_aj_01j8z9k3n8v5w6x7y8z9a0b1c2',
               status: 'queued',
-              analysis: 'standard',
-              createdAt: '2026-08-30T12:00:00.000Z',
+              endpoint: analyzeEndpoint,
+              createdAt: '2026-09-08T12:00:00.000Z',
             },
           },
         },
@@ -218,37 +153,30 @@ export class X402Guard implements CanActivate {
           properties: {
             input: {
               type: 'object',
-              required: ['url', 'analysis'],
+              required: ['url'],
               properties: {
                 url: {
                   type: 'string',
                   format: 'uri',
                   description: 'The website URL to analyze',
                 },
-                analysis: {
-                  type: 'string',
-                  enum: ['standard', 'deep'],
-                  description: 'Analysis depth - determines the price charged',
-                },
                 webhookUrl: {
                   type: 'string',
                   format: 'uri',
-                  description:
-                    'HTTPS URL to notify when the analysis completes',
+                  description: 'HTTPS URL to notify when the job completes',
                 },
               },
             },
             output: {
               type: 'object',
               properties: {
-                analysisId: { type: 'string' },
+                analyzeJobId: { type: 'string' },
                 status: {
                   type: 'string',
-                  enum: ['queued', 'running', 'completed', 'failed', 'expired'],
+                  enum: ['queued', 'running', 'completed', 'failed'],
                 },
-                analysis: { type: 'string', enum: ['standard', 'deep'] },
+                endpoint: { type: 'string' },
                 createdAt: { type: 'string', format: 'date-time' },
-                cached: { type: 'boolean' },
               },
             },
           },
@@ -366,17 +294,5 @@ export class X402Guard implements CanActivate {
     reply.header('PAYMENT-RESPONSE', encodePaymentResponseHeader(settleResult));
 
     return true;
-  }
-
-  private resolvePrice(analysisType: unknown): number {
-    if (analysisType === AnalysisType.standard) {
-      return this.appConfigService.priceStandardUsd;
-    }
-    if (analysisType === AnalysisType.deep) {
-      return this.appConfigService.priceDeepUsd;
-    }
-    throw new BadRequestException(
-      'Request body "analysis" field must be "standard" or "deep"',
-    );
   }
 }
