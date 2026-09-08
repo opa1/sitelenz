@@ -2,32 +2,48 @@ import { Logger } from '@nestjs/common';
 import { Processor } from '@nestjs/bullmq';
 import type { Job } from 'bullmq';
 import { PrismaService } from '../../common/prisma/prisma.service';
-import { TechnologyAnalyzerService } from '../../analyzers/technology/technology-analyzer.service';
-import { ANALYZE_TECHNOLOGY_QUEUE } from '../../queue/queue.constants';
+import { BrowserService } from '../../common/browser/browser.service';
+import { ObservationCollector } from '../../common/browser/observation-collector.service';
+import { LighthouseService } from '../../common/browser/lighthouse.service';
+import { UxAnalyzerService } from '../../analyzers/ux/ux-analyzer.service';
+import { ANALYZE_UX_ACCESSIBILITY_QUEUE } from '../../queue/queue.constants';
 import { CrawlCacheService } from '../crawl-cache.service';
 import { LightweightFetchService } from '../lightweight-fetch.service';
+import { HeavyAnalyzeConcurrencyGate } from '../heavy-analyze-concurrency.service';
 import { AnalyzeWebhookService } from '../analyze-webhook.service';
-import { BaseAnalyzeProcessor } from '../base-analyze.processor';
+import { BaseHeavyAnalyzeProcessor } from '../base-heavy-analyze.processor';
 import type { AnalyzeJobData } from '../analyze-job.interface';
 
-const ENDPOINT = 'technology' as const;
+const ENDPOINT = 'ux-accessibility' as const;
 
-@Processor(ANALYZE_TECHNOLOGY_QUEUE, {
-  concurrency: 5,
-  lockDuration: 120_000,
-  lockRenewTime: 30_000,
+@Processor(ANALYZE_UX_ACCESSIBILITY_QUEUE, {
+  concurrency: 1,
+  lockDuration: 300_000,
+  lockRenewTime: 60_000,
 })
-export class TechnologyProcessor extends BaseAnalyzeProcessor {
-  private readonly logger = new Logger(TechnologyProcessor.name);
+export class UxAccessibilityProcessor extends BaseHeavyAnalyzeProcessor {
+  private readonly logger = new Logger(UxAccessibilityProcessor.name);
 
   constructor(
     prisma: PrismaService,
     crawlCache: CrawlCacheService,
     lightweightFetch: LightweightFetchService,
-    private readonly technologyAnalyzer: TechnologyAnalyzerService,
+    browserService: BrowserService,
+    observationCollector: ObservationCollector,
+    lighthouseService: LighthouseService,
+    concurrencyGate: HeavyAnalyzeConcurrencyGate,
+    private readonly uxAnalyzer: UxAnalyzerService,
     private readonly analyzeWebhookService: AnalyzeWebhookService,
   ) {
-    super(prisma, crawlCache, lightweightFetch);
+    super(
+      prisma,
+      crawlCache,
+      lightweightFetch,
+      browserService,
+      observationCollector,
+      lighthouseService,
+      concurrencyGate,
+    );
   }
 
   async process(job: Job<AnalyzeJobData>): Promise<void> {
@@ -36,13 +52,14 @@ export class TechnologyProcessor extends BaseAnalyzeProcessor {
 
     try {
       await this.markRunning(analyzeJobId, stage);
-      const resolved = await this.resolveObservations(job.data, false);
-      const rawObservations = this.toRawObservations(resolved);
+      const resolved = await this.resolveFullObservations(job.data);
 
       stage = 'analyzing';
       await this.updateStage(analyzeJobId, stage);
-      const result = await this.technologyAnalyzer.analyze(rawObservations, {
-        deep: false,
+      // deep: true - mobile UX and reading-experience analysis via
+      // Lighthouse accessibility audits.
+      const result = await this.uxAnalyzer.analyze(resolved.observations, {
+        deep: true,
       });
 
       stage = 'storing_results';
@@ -65,7 +82,9 @@ export class TechnologyProcessor extends BaseAnalyzeProcessor {
           );
         });
 
-      this.logger.log(`Completed ${ENDPOINT} analyze job ${analyzeJobId}`);
+      this.logger.log(
+        `Completed ${ENDPOINT} analyze job ${analyzeJobId} (cacheHit=${resolved.cacheHit})`,
+      );
     } catch (error) {
       const err = error as Error & { code?: string };
       const errorMessage = error instanceof Error ? error.message : String(error);

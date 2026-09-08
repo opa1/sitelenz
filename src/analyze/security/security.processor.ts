@@ -35,7 +35,7 @@ export class SecurityProcessor extends BaseAnalyzeProcessor {
     let stage = 'resolving_observations';
 
     try {
-      await this.updateStage(analyzeJobId, stage);
+      await this.markRunning(analyzeJobId, stage);
       const resolved = await this.resolveObservations(job.data, false);
       const rawObservations = this.toRawObservations(resolved);
 

@@ -94,14 +94,16 @@ model WebhookDelivery {
 
 model Screenshot {
   id                 String         @id @default(uuid())
-  analysisId         String
-  analysis           Analysis       @relation(fields: [analysisId], references: [id], onDelete: Cascade)
+  analysisId         String?
+  analysis           Analysis?      @relation(fields: [analysisId], references: [id], onDelete: Cascade)
+  analyzeJobId       String?
   type               ScreenshotType
   cloudinaryUrl      String
   cloudinaryPublicId String
   createdAt          DateTime       @default(now())
 
   @@index([analysisId])
+  @@index([analyzeJobId])
   @@map("screenshots")
 }
 

@@ -25,3 +25,15 @@ export const ANALYZE_SECURITY_JOB_NAME = 'process-analyze-security';
 
 export const ANALYZE_BUSINESS_QUEUE = 'analyze-business';
 export const ANALYZE_BUSINESS_JOB_NAME = 'process-analyze-business';
+
+// Same one-queue-per-endpoint reasoning as above, for the three Playwright-
+// backed ("heavy") endpoints.
+export const ANALYZE_PERFORMANCE_QUEUE = 'analyze-performance';
+export const ANALYZE_PERFORMANCE_JOB_NAME = 'process-analyze-performance';
+
+export const ANALYZE_UX_ACCESSIBILITY_QUEUE = 'analyze-ux-accessibility';
+export const ANALYZE_UX_ACCESSIBILITY_JOB_NAME =
+  'process-analyze-ux-accessibility';
+
+export const ANALYZE_SCREENSHOTS_QUEUE = 'analyze-screenshots';
+export const ANALYZE_SCREENSHOTS_JOB_NAME = 'process-analyze-screenshots';

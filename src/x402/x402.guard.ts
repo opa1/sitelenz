@@ -87,7 +87,7 @@ export class X402Guard implements CanActivate {
     // /v1/analyze/{endpoint}/... - pulled from the URL (not injected as a
     // decorator arg) purely to build a human-readable description/example;
     // falls back to a generic label if the path shape ever changes.
-    const analyzeEndpointName = request.url.match(/\/v1\/analyze\/([a-z]+)/)?.[1];
+    const analyzeEndpointName = request.url.match(/\/v1\/analyze\/([a-z-]+)/)?.[1];
 
     const requirements =
       await this.resourceServer.buildPaymentRequirements(resourceConfig);

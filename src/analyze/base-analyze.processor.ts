@@ -89,6 +89,19 @@ export abstract class BaseAnalyzeProcessor extends WorkerHost {
     });
   }
 
+  /**
+   * Call once, as the very first DB write in `process()` - flips status from
+   * `queued` to `running` alongside the first progress stage. Every later
+   * transition goes through `updateStage` (progressStage only) so it can't
+   * clobber the terminal status `completeJob`/`failJob` set.
+   */
+  protected async markRunning(analyzeJobId: string, stage: string): Promise<void> {
+    await this.prisma.analyzeJob.update({
+      where: { id: analyzeJobId },
+      data: { status: AnalyzeJobStatus.running, progressStage: stage },
+    });
+  }
+
   protected async completeJob(
     analyzeJobId: string,
     result: Record<string, any>,

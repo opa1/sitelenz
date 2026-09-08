@@ -16,6 +16,9 @@ import { TechnologyAnalyzeModule } from './analyze/technology/technology.module'
 import { SeoAnalyzeModule } from './analyze/seo/seo.module';
 import { SecurityAnalyzeModule } from './analyze/security/security.module';
 import { BusinessAnalyzeModule } from './analyze/business/business.module';
+import { PerformanceAnalyzeModule } from './analyze/performance/performance.module';
+import { UxAccessibilityAnalyzeModule } from './analyze/ux-accessibility/ux-accessibility.module';
+import { ScreenshotsAnalyzeModule } from './analyze/screenshots/screenshots.module';
 import { WorkersModule } from './workers/workers.module';
 import { AiModule } from './ai/ai.module';
 import { StorageModule } from './storage/storage.module';
@@ -36,6 +39,9 @@ import { WebhooksModule } from './webhooks/webhooks.module';
     SeoAnalyzeModule,
     SecurityAnalyzeModule,
     BusinessAnalyzeModule,
+    PerformanceAnalyzeModule,
+    UxAccessibilityAnalyzeModule,
+    ScreenshotsAnalyzeModule,
     WorkersModule,
     AiModule,
     StorageModule,

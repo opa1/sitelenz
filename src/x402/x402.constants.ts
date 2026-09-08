@@ -20,8 +20,14 @@ export const X402_MAX_TIMEOUT_SECONDS = 60;
  */
 export const X402_GLOBAL_CHALLENGE_TAG = 'x402-global-challenge';
 
-/** Fixed USD price for every lightweight /v1/analyze/* endpoint. */
+/** Fixed USD price for every lightweight (no-browser) /v1/analyze/* endpoint. */
 export const ANALYZE_LIGHTWEIGHT_PRICE_USD = 0.01;
+
+/** Fixed USD price for the ux-accessibility and screenshots (heavy, browser-backed) endpoints. */
+export const ANALYZE_HEAVY_PRICE_USD = 0.01;
+
+/** Fixed USD price for the performance (heavy, browser-backed + Lighthouse) endpoint. */
+export const ANALYZE_PERFORMANCE_PRICE_USD = 0.02;
 
 /**
  * Algorand CAIP-2 network ids, built from the full genesis hash rather than

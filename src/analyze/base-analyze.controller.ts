@@ -11,12 +11,18 @@ import { generateAnalyzeJobId } from '../common/utils/id';
 import {
   ANALYZE_BUSINESS_JOB_NAME,
   ANALYZE_BUSINESS_QUEUE,
+  ANALYZE_PERFORMANCE_JOB_NAME,
+  ANALYZE_PERFORMANCE_QUEUE,
+  ANALYZE_SCREENSHOTS_JOB_NAME,
+  ANALYZE_SCREENSHOTS_QUEUE,
   ANALYZE_SECURITY_JOB_NAME,
   ANALYZE_SECURITY_QUEUE,
   ANALYZE_SEO_JOB_NAME,
   ANALYZE_SEO_QUEUE,
   ANALYZE_TECHNOLOGY_JOB_NAME,
   ANALYZE_TECHNOLOGY_QUEUE,
+  ANALYZE_UX_ACCESSIBILITY_JOB_NAME,
+  ANALYZE_UX_ACCESSIBILITY_QUEUE,
 } from '../queue/queue.constants';
 import type { AnalyzeEndpoint, AnalyzeJobData } from './analyze-job.interface';
 import { AnalyzeJobCreatedResponseDto } from './dto/analyze-job-created-response.dto';
@@ -41,13 +47,17 @@ const JOB_NAME_BY_ENDPOINT: Record<AnalyzeEndpoint, string> = {
   seo: ANALYZE_SEO_JOB_NAME,
   security: ANALYZE_SECURITY_JOB_NAME,
   business: ANALYZE_BUSINESS_JOB_NAME,
+  performance: ANALYZE_PERFORMANCE_JOB_NAME,
+  'ux-accessibility': ANALYZE_UX_ACCESSIBILITY_JOB_NAME,
+  screenshots: ANALYZE_SCREENSHOTS_JOB_NAME,
 };
 
 /**
  * Shared helper each per-endpoint controller (technology/seo/security/
- * business) injects and delegates to - not itself a `@Controller` / has no
- * routes of its own. Centralizes the AnalyzeJob CRUD + queueing logic common
- * to every lightweight analyze endpoint.
+ * business/performance/ux-accessibility/screenshots) injects and delegates
+ * to - not itself a `@Controller` / has no routes of its own. Centralizes
+ * the AnalyzeJob CRUD + queueing logic common to every analyze endpoint,
+ * lightweight or heavy alike.
  */
 @Injectable()
 export class BaseAnalyzeController {
@@ -63,12 +73,21 @@ export class BaseAnalyzeController {
     securityQueue: Queue<AnalyzeJobData>,
     @InjectQueue(ANALYZE_BUSINESS_QUEUE)
     businessQueue: Queue<AnalyzeJobData>,
+    @InjectQueue(ANALYZE_PERFORMANCE_QUEUE)
+    performanceQueue: Queue<AnalyzeJobData>,
+    @InjectQueue(ANALYZE_UX_ACCESSIBILITY_QUEUE)
+    uxAccessibilityQueue: Queue<AnalyzeJobData>,
+    @InjectQueue(ANALYZE_SCREENSHOTS_QUEUE)
+    screenshotsQueue: Queue<AnalyzeJobData>,
   ) {
     this.queues = {
       technology: technologyQueue,
       seo: seoQueue,
       security: securityQueue,
       business: businessQueue,
+      performance: performanceQueue,
+      'ux-accessibility': uxAccessibilityQueue,
+      screenshots: screenshotsQueue,
     };
   }
 

@@ -5,9 +5,12 @@ import { AppConfigService } from '../config';
 import {
   ANALYSIS_QUEUE,
   ANALYZE_BUSINESS_QUEUE,
+  ANALYZE_PERFORMANCE_QUEUE,
+  ANALYZE_SCREENSHOTS_QUEUE,
   ANALYZE_SECURITY_QUEUE,
   ANALYZE_SEO_QUEUE,
   ANALYZE_TECHNOLOGY_QUEUE,
+  ANALYZE_UX_ACCESSIBILITY_QUEUE,
   ANALYZE_WEBHOOK_QUEUE,
   WEBHOOK_QUEUE,
 } from './queue.constants';
@@ -34,6 +37,9 @@ import {
       { name: ANALYZE_SEO_QUEUE },
       { name: ANALYZE_SECURITY_QUEUE },
       { name: ANALYZE_BUSINESS_QUEUE },
+      { name: ANALYZE_PERFORMANCE_QUEUE },
+      { name: ANALYZE_UX_ACCESSIBILITY_QUEUE },
+      { name: ANALYZE_SCREENSHOTS_QUEUE },
     ),
   ],
   exports: [BullModule],
