@@ -1,0 +1,200 @@
+import { Injectable, NotFoundException } from '@nestjs/common';
+import { InjectQueue } from '@nestjs/bullmq';
+import { Queue } from 'bullmq';
+import { AnalyzeJobStatus } from '@prisma/client';
+import type { FastifyRequest } from 'fastify';
+import { PrismaService } from '../common/prisma/prisma.service';
+import { UrlValidatorService } from '../common/utils/url-validator.service';
+import { InvalidUrlException } from '../common/exceptions/invalid-url.exception';
+import { AnalysisNotFailedException } from '../common/exceptions/analysis-not-failed.exception';
+import { generateAnalyzeJobId } from '../common/utils/id';
+import {
+  ANALYZE_BUSINESS_JOB_NAME,
+  ANALYZE_BUSINESS_QUEUE,
+  ANALYZE_SECURITY_JOB_NAME,
+  ANALYZE_SECURITY_QUEUE,
+  ANALYZE_SEO_JOB_NAME,
+  ANALYZE_SEO_QUEUE,
+  ANALYZE_TECHNOLOGY_JOB_NAME,
+  ANALYZE_TECHNOLOGY_QUEUE,
+} from '../queue/queue.constants';
+import type { AnalyzeEndpoint, AnalyzeJobData } from './analyze-job.interface';
+import { AnalyzeJobCreatedResponseDto } from './dto/analyze-job-created-response.dto';
+import { AnalyzeJobStatusResponseDto } from './dto/analyze-job-status-response.dto';
+import { AnalyzeResultPendingResponseDto } from './dto/analyze-result-pending-response.dto';
+import { RetryAnalyzeJobResponseDto } from './dto/retry-analyze-job-response.dto';
+
+export interface CreateAnalyzeJobParams {
+  url: string;
+  webhookUrl?: string;
+  endpoint: AnalyzeEndpoint;
+  price: number;
+  req: FastifyRequest;
+}
+
+export type AnalyzeResultOutcome =
+  | { ready: true; result: Record<string, unknown> }
+  | { ready: false; pending: AnalyzeResultPendingResponseDto };
+
+const JOB_NAME_BY_ENDPOINT: Record<AnalyzeEndpoint, string> = {
+  technology: ANALYZE_TECHNOLOGY_JOB_NAME,
+  seo: ANALYZE_SEO_JOB_NAME,
+  security: ANALYZE_SECURITY_JOB_NAME,
+  business: ANALYZE_BUSINESS_JOB_NAME,
+};
+
+/**
+ * Shared helper each per-endpoint controller (technology/seo/security/
+ * business) injects and delegates to - not itself a `@Controller` / has no
+ * routes of its own. Centralizes the AnalyzeJob CRUD + queueing logic common
+ * to every lightweight analyze endpoint.
+ */
+@Injectable()
+export class BaseAnalyzeController {
+  private readonly queues: Record<AnalyzeEndpoint, Queue<AnalyzeJobData>>;
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly urlValidator: UrlValidatorService,
+    @InjectQueue(ANALYZE_TECHNOLOGY_QUEUE)
+    technologyQueue: Queue<AnalyzeJobData>,
+    @InjectQueue(ANALYZE_SEO_QUEUE) seoQueue: Queue<AnalyzeJobData>,
+    @InjectQueue(ANALYZE_SECURITY_QUEUE)
+    securityQueue: Queue<AnalyzeJobData>,
+    @InjectQueue(ANALYZE_BUSINESS_QUEUE)
+    businessQueue: Queue<AnalyzeJobData>,
+  ) {
+    this.queues = {
+      technology: technologyQueue,
+      seo: seoQueue,
+      security: securityQueue,
+      business: businessQueue,
+    };
+  }
+
+  async createJob(
+    params: CreateAnalyzeJobParams,
+  ): Promise<AnalyzeJobCreatedResponseDto> {
+    const validation = await this.urlValidator.validate(params.url);
+    if (!validation.valid) {
+      throw new InvalidUrlException(validation.reason);
+    }
+    const { normalizedUrl } = validation;
+
+    const analyzeJobId = generateAnalyzeJobId();
+    const job = await this.prisma.analyzeJob.create({
+      data: {
+        id: analyzeJobId,
+        endpoint: params.endpoint,
+        url: normalizedUrl,
+        normalizedUrl,
+        status: AnalyzeJobStatus.queued,
+        progressStage: 'queued',
+        webhookUrl: params.webhookUrl ?? null,
+      },
+    });
+
+    const jobData: AnalyzeJobData = {
+      analyzeJobId,
+      endpoint: params.endpoint,
+      url: normalizedUrl,
+      normalizedUrl,
+    };
+    await this.queues[params.endpoint].add(
+      JOB_NAME_BY_ENDPOINT[params.endpoint],
+      jobData,
+      { jobId: analyzeJobId },
+    );
+
+    return {
+      analyzeJobId: job.id,
+      status: job.status,
+      endpoint: job.endpoint,
+      createdAt: job.createdAt.toISOString(),
+    };
+  }
+
+  async getJob(id: string): Promise<AnalyzeJobStatusResponseDto> {
+    const job = await this.prisma.analyzeJob.findUnique({ where: { id } });
+    if (!job) {
+      throw new NotFoundException(`Analyze job "${id}" not found`);
+    }
+
+    return {
+      analyzeJobId: job.id,
+      endpoint: job.endpoint,
+      status: job.status,
+      progressStage: job.progressStage,
+      createdAt: job.createdAt.toISOString(),
+      completedAt: job.completedAt ? job.completedAt.toISOString() : null,
+      ...(job.status === AnalyzeJobStatus.failed && job.errorMessage
+        ? { errorMessage: job.errorMessage }
+        : {}),
+    };
+  }
+
+  async getResult(id: string): Promise<AnalyzeResultOutcome> {
+    const job = await this.prisma.analyzeJob.findUnique({ where: { id } });
+    if (!job) {
+      throw new NotFoundException(`Analyze job "${id}" not found`);
+    }
+
+    if (job.status !== AnalyzeJobStatus.completed) {
+      return {
+        ready: false,
+        pending: {
+          analyzeJobId: job.id,
+          status: job.status as 'queued' | 'running' | 'failed',
+          message: 'Analysis not yet complete',
+        },
+      };
+    }
+
+    return { ready: true, result: job.result as Record<string, unknown> };
+  }
+
+  async retryJob(id: string): Promise<RetryAnalyzeJobResponseDto> {
+    const job = await this.prisma.analyzeJob.findUnique({ where: { id } });
+    if (!job) {
+      throw new NotFoundException(`Analyze job "${id}" not found`);
+    }
+    if (job.status !== AnalyzeJobStatus.failed) {
+      throw new AnalysisNotFailedException();
+    }
+
+    const endpoint = job.endpoint as AnalyzeEndpoint;
+    const queue = this.queues[endpoint];
+
+    const updated = await this.prisma.analyzeJob.update({
+      where: { id },
+      data: {
+        status: AnalyzeJobStatus.queued,
+        progressStage: 'queued',
+        completedAt: null,
+        errorMessage: null,
+      },
+    });
+
+    // The original job (same jobId) is still sitting in Redis in its failed
+    // state - BullMQ treats add() with an existing jobId as a duplicate and
+    // silently no-ops rather than re-queuing it, so it must be removed first.
+    await queue.remove(id);
+    await queue.add(
+      JOB_NAME_BY_ENDPOINT[endpoint],
+      {
+        analyzeJobId: updated.id,
+        endpoint,
+        url: updated.url,
+        normalizedUrl: updated.normalizedUrl,
+      },
+      { jobId: id },
+    );
+
+    return {
+      analyzeJobId: updated.id,
+      status: updated.status,
+      endpoint: updated.endpoint,
+      retried: true,
+    };
+  }
+}

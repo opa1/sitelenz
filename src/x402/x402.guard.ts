@@ -5,6 +5,7 @@ import {
   Inject,
   Injectable,
 } from '@nestjs/common';
+import { Reflector } from '@nestjs/core';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { AnalysisType } from '@prisma/client';
 import type { x402ResourceServer, ResourceConfig } from '@x402/core/server';
@@ -22,6 +23,7 @@ import {
   X402_PAYMENT_HEADER,
   X402_RESOURCE_SERVER,
 } from './x402.constants';
+import { ANALYZE_PRICE_KEY } from './analyze-price.decorator';
 import { X402PaymentRequiredException } from './exceptions/x402-payment-required.exception';
 
 @Injectable()
@@ -30,6 +32,7 @@ export class X402Guard implements CanActivate {
     @Inject(X402_RESOURCE_SERVER)
     private readonly resourceServer: x402ResourceServer,
     private readonly appConfigService: AppConfigService,
+    private readonly reflector: Reflector,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -37,6 +40,14 @@ export class X402Guard implements CanActivate {
 
     const body = request.body as Record<string, unknown> | undefined;
     const analysisType = body?.['analysis'];
+    // /v1/analyze/* routes declare a fixed price via @SetAnalyzePrice
+    // instead of the legacy /v1/analyses body's "analysis" (standard/deep)
+    // field - check that first and skip resolvePrice's body validation
+    // entirely when present.
+    const analyzePrice = this.reflector.getAllAndOverride<number | undefined>(
+      ANALYZE_PRICE_KEY,
+      [context.getHandler(), context.getClass()],
+    );
     // Discovery probes (x402 Bazaar's doctor) hit this route with a plain,
     // bodyless GET just to see the 402 challenge - there's no "analysis"
     // field to resolve a price from, so resolvePrice's strict validation
@@ -44,9 +55,11 @@ export class X402Guard implements CanActivate {
     // still fails matching below since resourceConfig.price won't match
     // what the caller signed for a non-existent GET-priced resource.
     const priceUsd =
-      request.method === 'GET'
-        ? this.appConfigService.priceStandardUsd
-        : this.resolvePrice(analysisType);
+      analyzePrice !== undefined
+        ? analyzePrice
+        : request.method === 'GET'
+          ? this.appConfigService.priceStandardUsd
+          : this.resolvePrice(analysisType);
 
     const network =
       this.appConfigService.network === 'mainnet'
@@ -71,6 +84,11 @@ export class X402Guard implements CanActivate {
       },
     };
 
+    // /v1/analyze/{endpoint}/... - pulled from the URL (not injected as a
+    // decorator arg) purely to build a human-readable description/example;
+    // falls back to a generic label if the path shape ever changes.
+    const analyzeEndpointName = request.url.match(/\/v1\/analyze\/([a-z]+)/)?.[1];
+
     const requirements =
       await this.resourceServer.buildPaymentRequirements(resourceConfig);
     const resourceInfo = {
@@ -82,9 +100,11 @@ export class X402Guard implements CanActivate {
       // which broke locally on any non-default port.
       url: `${request.protocol}://${request.host}${request.url}`,
       description:
-        request.method === 'GET'
-          ? 'SiteLenz website analysis'
-          : `SiteLenz ${String(analysisType)} analysis`,
+        analyzePrice !== undefined
+          ? `SiteLenz ${analyzeEndpointName ?? 'website'} analysis`
+          : request.method === 'GET'
+            ? 'SiteLenz website analysis'
+            : `SiteLenz ${String(analysisType)} analysis`,
       mimeType: 'application/json',
     };
 
@@ -108,7 +128,64 @@ export class X402Guard implements CanActivate {
     // api.sitelenz.online). The extension describes the real paid action
     // (POST's body/response shape) regardless of which method fetched the
     // challenge.
-    const bazaarExtension = {
+    const bazaarExtension = analyzePrice !== undefined
+      ? {
+          bazaar: {
+            info: {
+              input: {
+                type: 'http',
+                method: 'POST',
+                bodyType: 'json',
+                body: { url: 'https://example.com' },
+              },
+              output: {
+                type: 'json',
+                example: {
+                  analyzeJobId: 'sl_aj_01j8z9k3n8v5w6x7y8z9a0b1c2',
+                  status: 'queued',
+                  endpoint: analyzeEndpointName ?? 'technology',
+                  createdAt: '2026-09-08T12:00:00.000Z',
+                },
+              },
+            },
+            schema: {
+              $schema: 'https://json-schema.org/draft/2020-12/schema',
+              type: 'object',
+              required: ['input'],
+              properties: {
+                input: {
+                  type: 'object',
+                  required: ['url'],
+                  properties: {
+                    url: {
+                      type: 'string',
+                      format: 'uri',
+                      description: 'The website URL to analyze',
+                    },
+                    webhookUrl: {
+                      type: 'string',
+                      format: 'uri',
+                      description: 'HTTPS URL to notify when the job completes',
+                    },
+                  },
+                },
+                output: {
+                  type: 'object',
+                  properties: {
+                    analyzeJobId: { type: 'string' },
+                    status: {
+                      type: 'string',
+                      enum: ['queued', 'running', 'completed', 'failed'],
+                    },
+                    endpoint: { type: 'string' },
+                    createdAt: { type: 'string', format: 'date-time' },
+                  },
+                },
+              },
+            },
+          },
+        }
+      : {
       bazaar: {
         info: {
           input: {

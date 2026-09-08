@@ -12,6 +12,10 @@ import { HealthModule } from './health/health.module';
 import { WellKnownModule } from './well-known/well-known.module';
 import { AnalysesModule } from './analyses/analyses.module';
 import { AnalyzeModule } from './analyze/analyze.module';
+import { TechnologyAnalyzeModule } from './analyze/technology/technology.module';
+import { SeoAnalyzeModule } from './analyze/seo/seo.module';
+import { SecurityAnalyzeModule } from './analyze/security/security.module';
+import { BusinessAnalyzeModule } from './analyze/business/business.module';
 import { WorkersModule } from './workers/workers.module';
 import { AiModule } from './ai/ai.module';
 import { StorageModule } from './storage/storage.module';
@@ -28,6 +32,10 @@ import { WebhooksModule } from './webhooks/webhooks.module';
     WellKnownModule,
     AnalysesModule,
     AnalyzeModule,
+    TechnologyAnalyzeModule,
+    SeoAnalyzeModule,
+    SecurityAnalyzeModule,
+    BusinessAnalyzeModule,
     WorkersModule,
     AiModule,
     StorageModule,

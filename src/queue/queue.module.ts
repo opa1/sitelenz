@@ -4,7 +4,10 @@ import IORedis from 'ioredis';
 import { AppConfigService } from '../config';
 import {
   ANALYSIS_QUEUE,
-  ANALYZE_QUEUE,
+  ANALYZE_BUSINESS_QUEUE,
+  ANALYZE_SECURITY_QUEUE,
+  ANALYZE_SEO_QUEUE,
+  ANALYZE_TECHNOLOGY_QUEUE,
   ANALYZE_WEBHOOK_QUEUE,
   WEBHOOK_QUEUE,
 } from './queue.constants';
@@ -26,8 +29,11 @@ import {
     BullModule.registerQueue(
       { name: ANALYSIS_QUEUE },
       { name: WEBHOOK_QUEUE },
-      { name: ANALYZE_QUEUE },
       { name: ANALYZE_WEBHOOK_QUEUE },
+      { name: ANALYZE_TECHNOLOGY_QUEUE },
+      { name: ANALYZE_SEO_QUEUE },
+      { name: ANALYZE_SECURITY_QUEUE },
+      { name: ANALYZE_BUSINESS_QUEUE },
     ),
   ],
   exports: [BullModule],
