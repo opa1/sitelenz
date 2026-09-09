@@ -3,7 +3,10 @@ import { Processor } from '@nestjs/bullmq';
 import type { Job } from 'bullmq';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { BusinessAnalyzerService } from '../../analyzers/business/business-analyzer.service';
-import { ANALYZE_BUSINESS_QUEUE } from '../../queue/queue.constants';
+import {
+  ANALYZE_BUSINESS_QUEUE,
+  WORKER_POLL_TUNING,
+} from '../../queue/queue.constants';
 import { CrawlCacheService } from '../crawl-cache.service';
 import { LightweightFetchService } from '../lightweight-fetch.service';
 import { AnalyzeWebhookService } from '../analyze-webhook.service';
@@ -16,6 +19,7 @@ const ENDPOINT = 'business' as const;
   concurrency: 5,
   lockDuration: 120_000,
   lockRenewTime: 30_000,
+  ...WORKER_POLL_TUNING,
 })
 export class BusinessProcessor extends BaseAnalyzeProcessor {
   private readonly logger = new Logger(BusinessProcessor.name);

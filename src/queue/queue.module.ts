@@ -29,6 +29,17 @@ import {
         // Redis instance shared with other apps; omitted (falls back to
         // BullMQ's own default "bull" prefix) when unset.
         prefix: appConfigService.redisKeyPrefix,
+        // Bound how long finished jobs linger in Redis. BullMQ keeps completed
+        // AND failed jobs forever by default, so Redis grows unboundedly with
+        // traffic. AnalyzeJob status/result live in Postgres (what the
+        // status/result endpoints actually read), so these Redis copies are
+        // pure bookkeeping; and retry re-adds a job from Postgres data
+        // (base-analyze.controller.ts removes the old one first), so pruning
+        // failed jobs is safe too.
+        defaultJobOptions: {
+          removeOnComplete: { age: 3600, count: 1000 },
+          removeOnFail: { age: 86_400, count: 5000 },
+        },
       }),
       inject: [AppConfigService],
     }),

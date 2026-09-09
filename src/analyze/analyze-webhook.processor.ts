@@ -7,6 +7,7 @@ import { AppConfigService } from '../config';
 import {
   ANALYZE_WEBHOOK_JOB_NAME,
   ANALYZE_WEBHOOK_QUEUE,
+  WORKER_POLL_TUNING,
 } from '../queue/queue.constants';
 import {
   WEBHOOK_MAX_ATTEMPTS,
@@ -27,6 +28,7 @@ interface DeliveryAttemptResult {
 @Processor(ANALYZE_WEBHOOK_QUEUE, {
   lockDuration: 300_000,
   lockRenewTime: 60_000,
+  ...WORKER_POLL_TUNING,
 })
 export class AnalyzeWebhookProcessor extends WorkerHost {
   private readonly logger = new Logger(AnalyzeWebhookProcessor.name);

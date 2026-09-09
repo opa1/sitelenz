@@ -6,7 +6,10 @@ import { BrowserService } from '../../common/browser/browser.service';
 import { ObservationCollector } from '../../common/browser/observation-collector.service';
 import { LighthouseService } from '../../common/browser/lighthouse.service';
 import { ScreenshotCaptureService } from '../../storage/screenshot-capture.service';
-import { ANALYZE_SCREENSHOTS_QUEUE } from '../../queue/queue.constants';
+import {
+  ANALYZE_SCREENSHOTS_QUEUE,
+  WORKER_POLL_TUNING,
+} from '../../queue/queue.constants';
 import { CrawlCacheService } from '../crawl-cache.service';
 import { LightweightFetchService } from '../lightweight-fetch.service';
 import { HeavyAnalyzeConcurrencyGate } from '../heavy-analyze-concurrency.service';
@@ -27,6 +30,7 @@ const ENDPOINT = 'screenshots' as const;
   concurrency: 1,
   lockDuration: 300_000,
   lockRenewTime: 60_000,
+  ...WORKER_POLL_TUNING,
 })
 export class ScreenshotsProcessor extends BaseHeavyAnalyzeProcessor {
   private readonly logger = new Logger(ScreenshotsProcessor.name);

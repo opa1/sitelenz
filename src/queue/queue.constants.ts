@@ -1,3 +1,22 @@
+/**
+ * Shared BullMQ Worker polling tuning, spread into every @Processor.
+ *
+ * Redis is billed per command (this app runs against Upstash), and every
+ * BullMQ Worker polls Redis even when idle: it blocks on the queue marker for
+ * `drainDelay` seconds then runs a `moveToActive` check, and sweeps for stalled
+ * jobs every `stalledInterval` ms. On the defaults (drainDelay 5s,
+ * stalledInterval 30s) each worker issues ~26 commands/min while idle - across
+ * this app's one-queue-per-endpoint layout that alone burns ~500k commands/day
+ * doing nothing, which trips Upstash's request cap ("max requests limit
+ * exceeded"). A newly added job still wakes a blocked worker immediately via
+ * the marker, so a longer drainDelay only stretches the idle re-check interval,
+ * never real job pickup latency.
+ */
+export const WORKER_POLL_TUNING = {
+  drainDelay: 60, // seconds (default 5) - idle marker-block timeout
+  stalledInterval: 300_000, // ms (default 30_000) - stalled-job sweep cadence
+} as const;
+
 export const ANALYSIS_QUEUE = 'analysis';
 export const ANALYSIS_JOB_NAME = 'process-analysis';
 

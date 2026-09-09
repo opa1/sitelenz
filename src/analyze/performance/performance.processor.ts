@@ -6,7 +6,10 @@ import { BrowserService } from '../../common/browser/browser.service';
 import { ObservationCollector } from '../../common/browser/observation-collector.service';
 import { LighthouseService } from '../../common/browser/lighthouse.service';
 import { PerformanceAnalyzerService } from '../../analyzers/performance/performance-analyzer.service';
-import { ANALYZE_PERFORMANCE_QUEUE } from '../../queue/queue.constants';
+import {
+  ANALYZE_PERFORMANCE_QUEUE,
+  WORKER_POLL_TUNING,
+} from '../../queue/queue.constants';
 import { CrawlCacheService } from '../crawl-cache.service';
 import { LightweightFetchService } from '../lightweight-fetch.service';
 import { HeavyAnalyzeConcurrencyGate } from '../heavy-analyze-concurrency.service';
@@ -23,6 +26,7 @@ const ENDPOINT = 'performance' as const;
   concurrency: 1,
   lockDuration: 300_000,
   lockRenewTime: 60_000,
+  ...WORKER_POLL_TUNING,
 })
 export class PerformanceProcessor extends BaseHeavyAnalyzeProcessor {
   private readonly logger = new Logger(PerformanceProcessor.name);

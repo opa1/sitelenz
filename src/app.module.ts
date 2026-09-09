@@ -22,7 +22,6 @@ import { ScreenshotsAnalyzeModule } from './analyze/screenshots/screenshots.modu
 import { AiSummaryAnalyzeModule } from './analyze/ai-summary/ai-summary.module';
 import { StandardAnalyzeModule } from './analyze/standard/standard.module';
 import { FullAnalyzeModule } from './analyze/full/full.module';
-import { WorkersModule } from './workers/workers.module';
 import { AiModule } from './ai/ai.module';
 import { StorageModule } from './storage/storage.module';
 import { WebhooksModule } from './webhooks/webhooks.module';
@@ -48,7 +47,13 @@ import { WebhooksModule } from './webhooks/webhooks.module';
     AiSummaryAnalyzeModule,
     StandardAnalyzeModule,
     FullAnalyzeModule,
-    WorkersModule,
+    // WorkersModule (the legacy v1 analysis/webhook BullMQ workers) is
+    // intentionally not imported: the v1 /v1/analyses controller is now a 301
+    // redirect, so nothing enqueues to the `analysis`/`webhook` queues and
+    // those two workers only ever polled Redis idle - dead cost on a
+    // per-command Redis (Upstash). The v1 queues stay registered in
+    // QueueModule (producers only, no polling) so AnalysesService/WebhookService
+    // still wire up.
     AiModule,
     StorageModule,
     WebhooksModule,

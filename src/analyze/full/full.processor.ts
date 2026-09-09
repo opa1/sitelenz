@@ -14,7 +14,10 @@ import { UxAnalyzerService } from '../../analyzers/ux/ux-analyzer.service';
 import { AiInputBuilderService } from '../../ai/ai-input-builder.service';
 import { AI_PROVIDER } from '../../ai/ai-provider.interface';
 import type { AIProvider } from '../../ai/ai-provider.interface';
-import { ANALYZE_FULL_QUEUE } from '../../queue/queue.constants';
+import {
+  ANALYZE_FULL_QUEUE,
+  WORKER_POLL_TUNING,
+} from '../../queue/queue.constants';
 import { CrawlCacheService } from '../crawl-cache.service';
 import { LightweightFetchService } from '../lightweight-fetch.service';
 import { HeavyAnalyzeConcurrencyGate } from '../heavy-analyze-concurrency.service';
@@ -28,6 +31,7 @@ import {
   concurrency: 1,
   lockDuration: 300_000,
   lockRenewTime: 60_000,
+  ...WORKER_POLL_TUNING,
 })
 export class FullProcessor extends BaseCompositeAnalyzeProcessor {
   protected readonly logger = new Logger(FullProcessor.name);
