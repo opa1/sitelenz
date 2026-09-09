@@ -14,6 +14,7 @@ import {
   encodePaymentResponseHeader,
 } from '@x402/core/http';
 import { AppConfigService } from '../config';
+import { buildBazaarDiscoveryExtension } from './bazaar-discovery';
 import {
   ALGORAND_MAINNET_NETWORK,
   ALGORAND_TESTNET_NETWORK,
@@ -99,88 +100,13 @@ export class X402Guard implements CanActivate {
     // Bazaar catalog listing: per the facilitator's integration guide
     // (facilitator.goplausible.xyz/guide), a settled payment only gets
     // auto-cataloged into /discovery/resources if the 402 response that
-    // preceded it carried a `bazaar` extension describing the resource's
-    // input/output shape - without it "payments process but the endpoint
-    // remains unlisted". We call x402ResourceServer directly (not the
-    // higher-level paymentMiddleware helper that builds this from a
-    // RouteConfig), so it's built by hand here and passed through the one
-    // low-level hook that exists for it: createPaymentRequiredResponse's
-    // `extensions` parameter.
-    //
-    // Attached on every method, not just POST: the x402 Doctor (and the
-    // Bazaar's own discovery crawler) only ever probes with GET - an earlier
-    // version of this guard scoped the extension to POST only "since GET is
-    // just a decoy," which meant the Doctor's GET probe never saw it and
-    // reported "no bazaar extension in the 402" even though real POST
-    // settles were happening (confirmed via a live Doctor report against
-    // api.sitelenz.online). The extension describes the real paid action
-    // (POST's body/response shape) regardless of which method fetched the
-    // challenge. Every /v1/analyze/* route shares the same generic
-    // {url, webhookUrl?} -> {analyzeJobId, status, endpoint, createdAt}
-    // shape, ai-summary included - it crawls a URL like every other endpoint.
-    const bazaarExtension = {
-      bazaar: {
-        info: {
-          input: {
-            type: 'http',
-            method: 'POST',
-            bodyType: 'json',
-            body: { url: 'https://example.com' },
-          },
-          output: {
-            type: 'json',
-            example: {
-              analyzeJobId: 'sl_aj_01j8z9k3n8v5w6x7y8z9a0b1c2',
-              status: 'queued',
-              endpoint: analyzeEndpoint,
-              createdAt: '2026-09-08T12:00:00.000Z',
-            },
-          },
-        },
-        // A single JSON Schema document with one root-level `$schema`, not
-        // separate `input`/`output` sub-documents each with their own -
-        // the catalog validator checks `bazaar.schema.$schema` specifically
-        // and silently drops the resource from /discovery/resources if it's
-        // missing there (confirmed via a live x402 Doctor report against
-        // api.sitelenz.online: "Present but REJECTED by the catalog
-        // validator... bazaar.schema.$schema must be draft 2020-12").
-        schema: {
-          $schema: 'https://json-schema.org/draft/2020-12/schema',
-          type: 'object',
-          required: ['input'],
-          properties: {
-            input: {
-              type: 'object',
-              required: ['url'],
-              properties: {
-                url: {
-                  type: 'string',
-                  format: 'uri',
-                  description: 'The website URL to analyze',
-                },
-                webhookUrl: {
-                  type: 'string',
-                  format: 'uri',
-                  description: 'HTTPS URL to notify when the job completes',
-                },
-              },
-            },
-            output: {
-              type: 'object',
-              properties: {
-                analyzeJobId: { type: 'string' },
-                status: {
-                  type: 'string',
-                  enum: ['queued', 'running', 'completed', 'failed'],
-                },
-                endpoint: { type: 'string' },
-                createdAt: { type: 'string', format: 'date-time' },
-              },
-            },
-          },
-        },
-      },
-    };
+    // preceded it carried a valid `bazaar` extension describing the resource's
+    // input/output shape - without a valid one "payments process but the
+    // endpoint remains unlisted". Built via the official @x402/extensions
+    // helper (see buildBazaarDiscoveryExtension) so it passes the facilitator's
+    // own discovery validator; attached on every method since the Doctor /
+    // Bazaar crawler only probes with GET.
+    const bazaarExtension = buildBazaarDiscoveryExtension(analyzeEndpoint);
 
     // Merchant identity (optional, per the same guide): controls the name,
     // logo, and categories shown on the facilitator's merchant listing. If
