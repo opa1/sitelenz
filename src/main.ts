@@ -97,7 +97,10 @@ async function bootstrap() {
     root: join(process.cwd(), 'public'),
   });
 
-  const port = process.env.PORT ?? 3000;
+  // Default 3002 to match the Dockerfile's EXPOSE/HEALTHCHECK and
+  // deploy/compose.yml's "127.0.0.1:3002:3002" mapping - so the container is
+  // reachable and its healthcheck passes even when PORT is not set in the env.
+  const port = process.env.PORT ?? 3002;
   await app.listen(port, '0.0.0.0');
 }
 void bootstrap();

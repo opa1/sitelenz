@@ -14,7 +14,7 @@ const requiredForNetwork = (network: 'testnet' | 'mainnet') =>
   });
 
 export const envValidationSchema = Joi.object({
-  PORT: Joi.number().default(3000),
+  PORT: Joi.number().default(3002),
   NETWORK: Joi.string().valid('testnet', 'mainnet').default('testnet'),
 
   TESTNET_ALGORAND_NODE_URL: requiredForNetwork('testnet'),
