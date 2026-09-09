@@ -8,6 +8,7 @@ import { UrlValidatorService } from '../common/utils/url-validator.service';
 import { InvalidUrlException } from '../common/exceptions/invalid-url.exception';
 import { AnalysisNotFailedException } from '../common/exceptions/analysis-not-failed.exception';
 import { generateAnalyzeJobId } from '../common/utils/id';
+import { getValidatedNormalizedUrl } from '../x402/validated-url';
 import {
   ANALYZE_AI_SUMMARY_JOB_NAME,
   ANALYZE_AI_SUMMARY_QUEUE,
@@ -108,11 +109,19 @@ export class BaseAnalyzeController {
   async createJob(
     params: CreateAnalyzeJobParams,
   ): Promise<AnalyzeJobCreatedResponseDto> {
-    const validation = await this.urlValidator.validate(params.url);
-    if (!validation.valid) {
-      throw new InvalidUrlException(validation.reason);
+    // The URL was already validated (protocol + DNS + SSRF) by X402Guard before
+    // payment settled, and its normalized form stashed on the request - reuse
+    // it rather than re-resolving DNS here (a second resolution would also
+    // reopen a charge-then-reject window on a DNS rebind). The fallback only
+    // runs if this method is ever reached without the guard having validated.
+    let normalizedUrl = getValidatedNormalizedUrl(params.req);
+    if (!normalizedUrl) {
+      const validation = await this.urlValidator.validate(params.url);
+      if (!validation.valid) {
+        throw new InvalidUrlException(validation.reason);
+      }
+      normalizedUrl = validation.normalizedUrl;
     }
-    const normalizedUrl = validation.normalizedUrl;
 
     const analyzeJobId = generateAnalyzeJobId();
     const job = await this.prisma.analyzeJob.create({

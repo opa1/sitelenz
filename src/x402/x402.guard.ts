@@ -14,7 +14,10 @@ import {
   encodePaymentResponseHeader,
 } from '@x402/core/http';
 import { AppConfigService } from '../config';
+import { UrlValidatorService } from '../common/utils/url-validator.service';
+import { InvalidUrlException } from '../common/exceptions/invalid-url.exception';
 import { buildBazaarDiscoveryExtension } from './bazaar-discovery';
+import { setValidatedNormalizedUrl } from './validated-url';
 import {
   ALGORAND_MAINNET_NETWORK,
   ALGORAND_TESTNET_NETWORK,
@@ -40,10 +43,28 @@ export class X402Guard implements CanActivate {
     private readonly resourceServer: x402ResourceServer,
     private readonly appConfigService: AppConfigService,
     private readonly reflector: Reflector,
+    private readonly urlValidator: UrlValidatorService,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest<FastifyRequest>();
+
+    // Validate the URL (protocol allowlist + DNS resolution + SSRF/private-IP
+    // rejection) BEFORE any payment work, so a malformed or unsafe URL is
+    // rejected with 400 INVALID_URL and the caller is never charged. NestJS
+    // runs the whole guard body before the handler/pipes, and Fastify has
+    // already parsed the body by the time a guard runs, so request.body is
+    // available here. Only the paid POST carries a url; the GET discovery decoy
+    // has no body and must still return the 402 challenge unconditionally.
+    if (request.method === 'POST') {
+      const body = request.body as { url?: unknown } | null | undefined;
+      const url = typeof body?.url === 'string' ? body.url : '';
+      const validation = await this.urlValidator.validate(url);
+      if (!validation.valid) {
+        throw new InvalidUrlException(validation.reason);
+      }
+      setValidatedNormalizedUrl(request, validation.normalizedUrl);
+    }
 
     const analyzeEndpoint = this.reflector.getAllAndOverride<
       string | undefined
