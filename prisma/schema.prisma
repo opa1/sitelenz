@@ -9,19 +9,6 @@ datasource db {
   provider = "postgresql"
 }
 
-enum AnalysisType {
-  standard
-  deep
-}
-
-enum AnalysisStatus {
-  queued
-  running
-  completed
-  failed
-  expired
-}
-
 enum WebhookDeliveryStatus {
   pending
   success
@@ -45,64 +32,14 @@ enum AnalyzeJobStatus {
   failed
 }
 
-model Analysis {
-  id             String         @id
-  url            String
-  analysisType   AnalysisType   @default(standard)
-  status         AnalysisStatus @default(queued)
-  progressStage  String         @default("pending")
-  errorMessage   String?
-  webhookUrl     String?
-  createdAt      DateTime       @default(now())
-  updatedAt      DateTime       @updatedAt
-  completedAt    DateTime?
-
-  report            AnalysisReport?
-  webhookDeliveries WebhookDelivery[]
-  screenshots       Screenshot[]
-
-  @@index([url, analysisType, status])
-  @@map("analyses")
-}
-
-model AnalysisReport {
-  id         String   @id @default(uuid())
-  analysisId String   @unique
-  analysis   Analysis @relation(fields: [analysisId], references: [id], onDelete: Cascade)
-  report     Json
-  createdAt  DateTime @default(now())
-
-  @@map("analysis_reports")
-}
-
-model WebhookDelivery {
-  id             String                @id @default(uuid())
-  analysisId     String
-  analysis       Analysis              @relation(fields: [analysisId], references: [id], onDelete: Cascade)
-  url            String
-  event          String
-  status         WebhookDeliveryStatus @default(pending)
-  attempts       Int                   @default(0)
-  lastAttemptAt  DateTime?
-  nextAttemptAt  DateTime?
-  responseStatus Int?
-  createdAt      DateTime              @default(now())
-
-  @@index([analysisId])
-  @@map("webhook_deliveries")
-}
-
 model Screenshot {
   id                 String         @id @default(uuid())
-  analysisId         String?
-  analysis           Analysis?      @relation(fields: [analysisId], references: [id], onDelete: Cascade)
   analyzeJobId       String?
   type               ScreenshotType
   cloudinaryUrl      String
   cloudinaryPublicId String
   createdAt          DateTime       @default(now())
 
-  @@index([analysisId])
   @@index([analyzeJobId])
   @@map("screenshots")
 }
@@ -129,8 +66,6 @@ model AnalyzeJob {
   progressStage       String           @default("queued")
   errorMessage        String?
   webhookUrl          String?
-  crawlObservationId  String?
-  findings            Json?
   result              Json?
   createdAt           DateTime         @default(now())
   updatedAt           DateTime         @updatedAt

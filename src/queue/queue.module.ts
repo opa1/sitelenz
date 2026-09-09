@@ -3,7 +3,6 @@ import { BullModule } from '@nestjs/bullmq';
 import IORedis from 'ioredis';
 import { AppConfigService } from '../config';
 import {
-  ANALYSIS_QUEUE,
   ANALYZE_AI_SUMMARY_QUEUE,
   ANALYZE_BUSINESS_QUEUE,
   ANALYZE_FULL_QUEUE,
@@ -15,7 +14,6 @@ import {
   ANALYZE_TECHNOLOGY_QUEUE,
   ANALYZE_UX_ACCESSIBILITY_QUEUE,
   ANALYZE_WEBHOOK_QUEUE,
-  WEBHOOK_QUEUE,
 } from './queue.constants';
 
 @Module({
@@ -44,8 +42,6 @@ import {
       inject: [AppConfigService],
     }),
     BullModule.registerQueue(
-      { name: ANALYSIS_QUEUE },
-      { name: WEBHOOK_QUEUE },
       { name: ANALYZE_WEBHOOK_QUEUE },
       { name: ANALYZE_TECHNOLOGY_QUEUE },
       { name: ANALYZE_SEO_QUEUE },

@@ -10,7 +10,6 @@ import { HttpLoggerMiddleware } from './common/middleware/http-logger.middleware
 import { QueueModule } from './queue/queue.module';
 import { HealthModule } from './health/health.module';
 import { WellKnownModule } from './well-known/well-known.module';
-import { AnalysesModule } from './analyses/analyses.module';
 import { AnalyzeModule } from './analyze/analyze.module';
 import { TechnologyAnalyzeModule } from './analyze/technology/technology.module';
 import { SeoAnalyzeModule } from './analyze/seo/seo.module';
@@ -24,7 +23,6 @@ import { StandardAnalyzeModule } from './analyze/standard/standard.module';
 import { FullAnalyzeModule } from './analyze/full/full.module';
 import { AiModule } from './ai/ai.module';
 import { StorageModule } from './storage/storage.module';
-import { WebhooksModule } from './webhooks/webhooks.module';
 
 @Module({
   imports: [
@@ -35,7 +33,6 @@ import { WebhooksModule } from './webhooks/webhooks.module';
     QueueModule,
     HealthModule,
     WellKnownModule,
-    AnalysesModule,
     AnalyzeModule,
     TechnologyAnalyzeModule,
     SeoAnalyzeModule,
@@ -47,16 +44,8 @@ import { WebhooksModule } from './webhooks/webhooks.module';
     AiSummaryAnalyzeModule,
     StandardAnalyzeModule,
     FullAnalyzeModule,
-    // WorkersModule (the legacy v1 analysis/webhook BullMQ workers) is
-    // intentionally not imported: the v1 /v1/analyses controller is now a 301
-    // redirect, so nothing enqueues to the `analysis`/`webhook` queues and
-    // those two workers only ever polled Redis idle - dead cost on a
-    // per-command Redis (Upstash). The v1 queues stay registered in
-    // QueueModule (producers only, no polling) so AnalysesService/WebhookService
-    // still wire up.
     AiModule,
     StorageModule,
-    WebhooksModule,
     // Two named tiers, one shared global guard (see the module-level
     // ThrottlerGuard docs - @nestjs/throttler's ThrottlerModule is @Global(),
     // so a second forRoot() call scoped to a feature module would collide
@@ -64,7 +53,7 @@ import { WebhooksModule } from './webhooks/webhooks.module';
     // independent). 'global' applies to every route by default. The
     // stricter 'analysis-create' tier is opted out of everywhere via
     // @SkipThrottle at the controller level and opted back in on just
-    // POST /v1/analyses - see analyses.controller.ts and
+    // POST /v1/analyze/* - see the analyze controllers and
     // health.controller.ts.
     ThrottlerModule.forRoot([
       { name: 'global', ttl: 60_000, limit: 200 },

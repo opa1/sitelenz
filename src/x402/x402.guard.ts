@@ -30,11 +30,11 @@ import { ANALYZE_ENDPOINT_KEY } from './analyze-price.decorator';
 import { X402PaymentRequiredException } from './exceptions/x402-payment-required.exception';
 
 /**
- * Every route this guard protects is one of the /v1/analyze/* endpoints and
- * declares its endpoint name via @SetAnalyzePrice - the legacy /v1/analyses
- * body-shape ("analysis": "standard"/"deep") pricing path this guard used
- * to also support was removed once that controller became a plain 301
- * redirect with no guard attached at all.
+ * Guards every /v1/analyze/* endpoint. Each route declares its endpoint name
+ * via @SetAnalyzePrice, which this guard reads to resolve the per-endpoint
+ * price. On the paid POST it first validates the request URL (protocol + DNS +
+ * SSRF) so an invalid or unsafe URL is rejected with 400 before any payment
+ * work; the GET discovery decoy carries no URL and returns the 402 challenge.
  */
 @Injectable()
 export class X402Guard implements CanActivate {

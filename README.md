@@ -370,7 +370,7 @@ Each single-analyzer endpoint (`technology`, `seo`, `security`, `business`, `per
 
 | Variable | Description |
 |---|---|
-| `REDIS_URL` | Redis connection string used by BullMQ for the per-endpoint analyze queues, the analyze-webhook queue, and the legacy analysis/webhook queues |
+| `REDIS_URL` | Redis connection string used by BullMQ for the per-endpoint analyze queues and the analyze-webhook queue |
 
 ### Algorand / x402 (Testnet)
 

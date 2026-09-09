@@ -17,12 +17,6 @@ export const WORKER_POLL_TUNING = {
   stalledInterval: 300_000, // ms (default 30_000) - stalled-job sweep cadence
 } as const;
 
-export const ANALYSIS_QUEUE = 'analysis';
-export const ANALYSIS_JOB_NAME = 'process-analysis';
-
-export const WEBHOOK_QUEUE = 'webhook';
-export const WEBHOOK_JOB_NAME = 'deliver-webhook';
-
 export const ANALYZE_WEBHOOK_QUEUE = 'analyze-webhook';
 export const ANALYZE_WEBHOOK_JOB_NAME = 'deliver-analyze-webhook';
 
