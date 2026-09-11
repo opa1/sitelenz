@@ -235,10 +235,25 @@ export class DiscoveryController {
 <body>
   <h1>${PRODUCT_NAME}</h1>
   <p>${PRODUCT_DESCRIPTION}</p>
-  <p>
-    <a href="https://sitelenz.online">Website</a> |
-    <a href="/docs">Documentation</a>
-  </p>
+
+  <h2>Links</h2>
+  <ul>
+    <li><a href="https://sitelenz.online">Website</a></li>
+    <li><a href="/docs">Documentation</a></li>
+    <li><a href="/docs-json">OpenAPI Specification (JSON)</a></li>
+    <li><a href="/v1/analyze">Analysis Catalog</a></li>
+  </ul>
+
+  <h2>AI &amp; Agent Endpoints</h2>
+  <ul>
+    <li><a href="/.well-known/agent.json">/.well-known/agent.json</a> (Agent Card)</li>
+    <li><a href="/.well-known/agent-card.json">/.well-known/agent-card.json</a> (Agent Card alias)</li>
+    <li><a href="/.well-known/mcp.json">/.well-known/mcp.json</a> (Model Context Protocol)</li>
+    <li><a href="/.well-known/ai-plugin.json">/.well-known/ai-plugin.json</a> (OpenAI Plugin Manifest)</li>
+    <li><a href="/.well-known/x402">/.well-known/x402</a> (x402 Bazaar Manifest)</li>
+    <li><a href="/llms.txt">/llms.txt</a> (LLM Instructions)</li>
+    <li><a href="/health">/health</a> (Service Health)</li>
+  </ul>
 </body>
 </html>`;
   }

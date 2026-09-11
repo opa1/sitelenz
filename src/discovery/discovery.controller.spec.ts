@@ -76,6 +76,11 @@ describe('DiscoveryController', () => {
     expect(res.body).toContain('<link rel="icon" type="image/png" href="/logo.png">');
     expect(res.body).toContain('https://sitelenz.online');
     expect(res.body).toContain('/docs');
+    expect(res.body).toContain('/.well-known/agent.json');
+    expect(res.body).toContain('/.well-known/mcp.json');
+    expect(res.body).toContain('/.well-known/ai-plugin.json');
+    expect(res.body).toContain('/.well-known/x402');
+    expect(res.body).toContain('/llms.txt');
   });
 
   it('GET / returns HTML with Open Graph tags for social crawlers (200)', async () => {
