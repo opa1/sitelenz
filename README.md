@@ -1,6 +1,8 @@
 # SiteLenz
 
-SiteLenz is a pay-per-request Website Intelligence API. Ten `/v1/analyze/*` endpoints each accept a URL behind a single x402 micropayment on Algorand, then asynchronously crawl and analyze the target and return structured JSON - individually (technology, SEO, security, business, performance, UX/accessibility, screenshots, AI summary) or as a composite report (`standard`, `full`) covering technology stack, SEO, security headers, performance metrics, business signals, UX observations, and an AI-generated interpretation via Groq - delivered through a webhook or retrievable by polling.
+SiteLenz is a pay-per-request Website Intelligence API. Give it a URL and get structured analysis of its technology, SEO, security, business, UX/accessibility, performance, screenshots, and more. Built for applications and AI agents, with each request paid in USDC through x402.
+
+Ten `/v1/analyze/*` endpoints each accept a URL behind a single x402 micropayment on Algorand, then asynchronously crawl and analyze the target and return structured JSON - individually (technology, SEO, security, business, performance, UX/accessibility, screenshots, AI summary) or as a composite report (`standard`, `full`) covering technology stack, SEO, security headers, performance metrics, business signals, UX observations, and an AI-generated interpretation via Groq - delivered through a webhook or retrievable by polling.
 
 Built for the [Algorand Global x402 Challenge](https://algorand.co/global-x402-challenge).
 

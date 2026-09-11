@@ -32,9 +32,11 @@ import { X402PaymentRequiredException } from './exceptions/x402-payment-required
 /**
  * Guards every /v1/analyze/* endpoint. Each route declares its endpoint name
  * via @SetAnalyzePrice, which this guard reads to resolve the per-endpoint
- * price. On the paid POST it first validates the request URL (protocol + DNS +
- * SSRF) so an invalid or unsafe URL is rejected with 400 before any payment
- * work; the GET discovery decoy carries no URL and returns the 402 challenge.
+ * price. A request with no payment header - including bodyless crawler / x402
+ * Doctor probes - receives the 402 challenge first, before any application-
+ * level validation. A request that carries a payment then has its URL validated
+ * (protocol + DNS + SSRF) before settlement, so an invalid or unsafe URL is
+ * rejected with 400 and never charged.
  */
 @Injectable()
 export class X402Guard implements CanActivate {
@@ -48,23 +50,6 @@ export class X402Guard implements CanActivate {
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest<FastifyRequest>();
-
-    // Validate the URL (protocol allowlist + DNS resolution + SSRF/private-IP
-    // rejection) BEFORE any payment work, so a malformed or unsafe URL is
-    // rejected with 400 INVALID_URL and the caller is never charged. NestJS
-    // runs the whole guard body before the handler/pipes, and Fastify has
-    // already parsed the body by the time a guard runs, so request.body is
-    // available here. Only the paid POST carries a url; the GET discovery decoy
-    // has no body and must still return the 402 challenge unconditionally.
-    if (request.method === 'POST') {
-      const body = request.body as { url?: unknown } | null | undefined;
-      const url = typeof body?.url === 'string' ? body.url : '';
-      const validation = await this.urlValidator.validate(url);
-      if (!validation.valid) {
-        throw new InvalidUrlException(validation.reason);
-      }
-      setValidatedNormalizedUrl(request, validation.normalizedUrl);
-    }
 
     const analyzeEndpoint = this.reflector.getAllAndOverride<
       string | undefined
@@ -171,6 +156,24 @@ export class X402Guard implements CanActivate {
           extensions,
         ),
       );
+    }
+
+    // Any request without a payment header - including bodyless probes from
+    // the x402 Doctor / Bazaar crawler - has already received the 402 challenge
+    // above, before any application-level validation runs. Only a request that
+    // actually carries a payment reaches here, and its URL is validated now
+    // (protocol allowlist + DNS + SSRF/private-IP rejection) BEFORE
+    // verify/settle below - so a malformed or unsafe URL is rejected with 400
+    // and the caller is never charged. Fastify has already parsed the body by
+    // the time a guard runs, so request.body is available.
+    if (request.method === 'POST') {
+      const body = request.body as { url?: unknown } | null | undefined;
+      const url = typeof body?.url === 'string' ? body.url : '';
+      const validation = await this.urlValidator.validate(url);
+      if (!validation.valid) {
+        throw new InvalidUrlException(validation.reason);
+      }
+      setValidatedNormalizedUrl(request, validation.normalizedUrl);
     }
 
     let paymentPayload: PaymentPayload;

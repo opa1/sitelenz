@@ -10,6 +10,7 @@ import { HttpLoggerMiddleware } from './common/middleware/http-logger.middleware
 import { QueueModule } from './queue/queue.module';
 import { HealthModule } from './health/health.module';
 import { WellKnownModule } from './well-known/well-known.module';
+import { DiscoveryModule } from './discovery/discovery.module';
 import { AnalyzeModule } from './analyze/analyze.module';
 import { TechnologyAnalyzeModule } from './analyze/technology/technology.module';
 import { SeoAnalyzeModule } from './analyze/seo/seo.module';
@@ -33,6 +34,7 @@ import { StorageModule } from './storage/storage.module';
     QueueModule,
     HealthModule,
     WellKnownModule,
+    DiscoveryModule,
     AnalyzeModule,
     TechnologyAnalyzeModule,
     SeoAnalyzeModule,

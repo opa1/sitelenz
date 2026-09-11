@@ -63,7 +63,7 @@ export class WellKnownController {
       x402Version: 2,
       name: 'SiteLenz',
       description:
-        'Website intelligence API - automated technology, SEO, security, performance, business, and UX analysis, individually or as a full report, with AI interpretation.',
+        'SiteLenz is a pay-per-request Website Intelligence API. Give it a URL and get structured analysis of its technology, SEO, security, business, UX/accessibility, performance, screenshots, and more. Built for applications and AI agents, with each request paid in USDC through x402.',
       resources: withAnalyzePrices(this.appConfigService).map(
         ({ name, description, price }) => ({
           url: `${origin}/v1/analyze/${name}`,

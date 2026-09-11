@@ -1,7 +1,7 @@
 {
   "name": "sitelenz",
   "version": "0.0.1",
-  "description": "",
+  "description": "SiteLenz is a pay-per-request Website Intelligence API. Give it a URL and get structured analysis of its technology, SEO, security, business, UX/accessibility, performance, screenshots, and more. Built for applications and AI agents, with each request paid in USDC through x402.",
   "author": "",
   "private": true,
   "license": "UNLICENSED",

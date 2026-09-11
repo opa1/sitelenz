@@ -59,12 +59,17 @@ async function bootstrap() {
 
   const swaggerConfig = new DocumentBuilder()
     .setTitle('SiteLenz')
-    .setDescription('Website Intelligence API')
+    .setDescription(
+      'SiteLenz is a pay-per-request Website Intelligence API. Give it a URL and get structured analysis of its technology, SEO, security, business, UX/accessibility, performance, screenshots, and more. Built for applications and AI agents, with each request paid in USDC through x402.',
+    )
     .setVersion('1.0')
     .addServer('https://api.sitelenz.online')
     .build();
   const document = SwaggerModule.createDocument(app, swaggerConfig);
-  SwaggerModule.setup('docs', app, document);
+  SwaggerModule.setup('docs', app, document, {
+    customSiteTitle: 'SiteLenz - Website Intelligence API',
+    customfavIcon: '/logo.png',
+  });
 
   // NestJS's enableCors() doesn't correctly wire up preflight OPTIONS routes
   // under the Fastify adapter - register the Fastify plugin directly instead.
@@ -87,14 +92,20 @@ async function bootstrap() {
     optionsSuccessStatus: 200,
   });
 
-  // Serves public/logo.png at GET /logo.png - the only static asset this API
-  // has, referenced by the x402-merchant extension (see x402.guard.ts) so
-  // the facilitator's merchant listing has a logo. process.cwd(), not a
+  // Serves public/ assets (e.g. GET /logo.png, GET /og-image.png) at both root
+  // and /public/ - referenced by Open Graph metadata, social preview scrapers,
+  // and the x402-merchant extension (see x402.guard.ts). process.cwd(), not a
   // __dirname-relative path, for the same reason configuration.ts reads
   // package.json that way: ts-node (dev) and dist/src/main.js (prod) sit at
   // different depths from the repo root, but both run with cwd set to it.
   await app.register(fastifyStatic, {
     root: join(process.cwd(), 'public'),
+  });
+
+  await app.register(fastifyStatic, {
+    root: join(process.cwd(), 'public'),
+    prefix: '/public/',
+    decorateReply: false,
   });
 
   // Default 3002 to match the Dockerfile's EXPOSE/HEALTHCHECK and
