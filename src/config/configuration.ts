@@ -27,6 +27,7 @@ function readPackageVersion(): string {
 // request). openai/gpt-oss-120b is Groq's current flagship large
 // open-weight model and the closest replacement; override via GROQ_MODEL.
 export const DEFAULT_GROQ_MODEL = 'openai/gpt-oss-120b';
+export const DEFAULT_GROQ_VISION_MODEL = 'qwen/qwen3.8-27b';
 
 export interface NetworkConfig {
   algorandNodeUrl: string;
@@ -54,6 +55,7 @@ export interface AppConfiguration {
   groq: {
     apiKey: string;
     model: string;
+    visionModel: string;
   };
   webhook: {
     secret: string;
@@ -62,6 +64,7 @@ export interface AppConfiguration {
     cacheTtlHours: number;
     maxConcurrentAnalyses: number;
     timeoutMs: number;
+    maxCapacityWaitMs: number;
   };
   /**
    * Fixed USD price per /v1/analyze/* endpoint, keyed by endpoint name
@@ -105,6 +108,7 @@ export default (): AppConfiguration => ({
   groq: {
     apiKey: process.env.GROQ_API_KEY ?? '',
     model: process.env.GROQ_MODEL ?? DEFAULT_GROQ_MODEL,
+    visionModel: process.env.GROQ_VISION_MODEL ?? DEFAULT_GROQ_VISION_MODEL,
   },
   webhook: {
     secret: process.env.WEBHOOK_SECRET ?? '',
@@ -113,6 +117,7 @@ export default (): AppConfiguration => ({
     cacheTtlHours: Number(process.env.ANALYSIS_CACHE_TTL_HOURS ?? 48),
     maxConcurrentAnalyses: Number(process.env.MAX_CONCURRENT_ANALYSES ?? 3),
     timeoutMs: Number(process.env.ANALYSIS_TIMEOUT_MS ?? 120000),
+    maxCapacityWaitMs: Number(process.env.MAX_CAPACITY_WAIT_MS ?? 900000),
   },
   analyzePrices: {
     technology: Number(process.env.ANALYZE_PRICE_TECHNOLOGY),

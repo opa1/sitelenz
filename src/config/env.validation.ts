@@ -1,5 +1,5 @@
 import * as Joi from 'joi';
-import { DEFAULT_GROQ_MODEL } from './configuration';
+import { DEFAULT_GROQ_MODEL, DEFAULT_GROQ_VISION_MODEL } from './configuration';
 
 // Deployment prep: only the ACTIVE network's core fields (node URL, payTo,
 // USDC asset id) are required at boot - this is what lets NETWORK be the
@@ -40,12 +40,14 @@ export const envValidationSchema = Joi.object({
 
   GROQ_API_KEY: Joi.string().required(),
   GROQ_MODEL: Joi.string().default(DEFAULT_GROQ_MODEL),
+  GROQ_VISION_MODEL: Joi.string().default(DEFAULT_GROQ_VISION_MODEL),
 
   WEBHOOK_SECRET: Joi.string().required(),
 
   ANALYSIS_CACHE_TTL_HOURS: Joi.number().default(48),
   MAX_CONCURRENT_ANALYSES: Joi.number().default(3),
   ANALYSIS_TIMEOUT_MS: Joi.number().default(120000),
+  MAX_CAPACITY_WAIT_MS: Joi.number().default(900000),
 
   // Per-endpoint x402 prices (USD) - one var per /v1/analyze/* endpoint so
   // pricing can change via env var + restart, with no code/redeploy needed.

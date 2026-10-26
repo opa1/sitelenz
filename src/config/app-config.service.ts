@@ -78,6 +78,10 @@ export class AppConfigService {
     return this.configService.get('groq', { infer: true }).model;
   }
 
+  get groqVisionModel(): string {
+    return this.configService.get('groq', { infer: true }).visionModel;
+  }
+
   get webhookSecret(): string {
     return this.configService.get('webhook', { infer: true }).secret;
   }
@@ -93,6 +97,11 @@ export class AppConfigService {
 
   get analysisTimeoutMs(): number {
     return this.configService.get('analysis', { infer: true }).timeoutMs;
+  }
+
+  get maxCapacityWaitMs(): number {
+    return this.configService.get('analysis', { infer: true })
+      .maxCapacityWaitMs;
   }
 
   /** Fixed USD price per /v1/analyze/* endpoint, keyed by endpoint name. */

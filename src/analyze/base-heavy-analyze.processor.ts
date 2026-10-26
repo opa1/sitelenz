@@ -1,4 +1,5 @@
 import type { BrowserContext } from 'playwright';
+import { DelayedError, type Job } from 'bullmq';
 import { CrawlType, type Prisma } from '@prisma/client';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { BrowserService } from '../common/browser/browser.service';
@@ -8,9 +9,17 @@ import type { RawObservations } from '../common/browser/raw-observations.interfa
 import { normalizeUrl } from '../common/utils/normalize-url.util';
 import { CrawlCacheService } from './crawl-cache.service';
 import { LightweightFetchService } from './lightweight-fetch.service';
-import { HeavyAnalyzeConcurrencyGate } from './heavy-analyze-concurrency.service';
+import {
+  CapacityTimeoutError,
+  HeavyAnalyzeConcurrencyGate,
+} from './heavy-analyze-concurrency.service';
 import { BaseAnalyzeProcessor } from './base-analyze.processor';
 import type { AnalyzeJobData } from './analyze-job.interface';
+
+/** progressStage a queued job shows while it waits for a free browser slot. */
+export const WAITING_FOR_CAPACITY_STAGE = 'waiting_for_capacity';
+/** How long a job waits before checking for a free slot again. */
+const CAPACITY_RETRY_DELAY_MS = 5_000;
 
 export interface ResolvedFullObservations {
   observations: RawObservations;
@@ -20,8 +29,7 @@ export interface ResolvedFullObservations {
    * Only set on a fresh (non-cache-hit) crawl when `keepContextOpen: true`
    * was requested - the screenshots processor needs a live browser context
    * to take screenshots from, not just the stored observations. Close it via
-   * `releaseContext()` (not `context.close()` directly), which also frees
-   * the HeavyAnalyzeConcurrencyGate slot this context is holding.
+   * `releaseContext()`.
    */
   context?: BrowserContext;
   releaseContext?: () => Promise<void>;
@@ -48,22 +56,63 @@ export abstract class BaseHeavyAnalyzeProcessor extends BaseAnalyzeProcessor {
   }
 
   /**
-   * Runs `fn` with a browser context whose lifetime it fully owns: acquires
-   * a HeavyAnalyzeConcurrencyGate slot, acquires the context, runs `fn`,
-   * then always closes the context and releases the slot together. Use this
-   * whenever the context doesn't need to outlive the call (i.e. everywhere
-   * except resolveFullObservations's `keepContextOpen` path).
+   * Claims this job's HeavyAnalyzeConcurrencyGate slot, or - when all slots
+   * are taken - puts the job back in the queue to try again shortly. Call it
+   * first in `process()`, before anything that marks the job running, and
+   * release the slot in a `finally` once it returns.
+   *
+   * Never fails the job for lack of capacity (clients have already paid by
+   * the time it runs) and never holds the BullMQ lock while waiting:
+   * `moveToDelayed` hands the job back to the delayed set and the
+   * DelayedError tells the worker not to complete or fail it. moveToDelayed
+   * skips the attempt counter, so waiting never counts as a retry, and the
+   * analysis timeout only starts once the job actually crawls. The DB status
+   * stays `queued`; only progressStage changes, so polling clients can see
+   * why the job hasn't started.
+   *
+   * Throws CapacityTimeoutError only once the job has waited longer than
+   * MAX_CAPACITY_WAIT_MS in total, which the caller's catch turns into a
+   * normal failed job + analyze.failed webhook (retryable for free).
+   */
+  protected async acquireSlotOrDelay(
+    job: Job<AnalyzeJobData>,
+    token: string | undefined,
+  ): Promise<void> {
+    if (this.concurrencyGate.tryAcquire()) return;
+
+    const { analyzeJobId, endpoint } = job.data;
+    const now = Date.now();
+    const firstWait = job.data.capacityWaitStartedAt === undefined;
+    const waitStartedAt = job.data.capacityWaitStartedAt ?? now;
+    const waitedMs = now - waitStartedAt;
+    if (waitedMs >= this.concurrencyGate.maxWaitMs) {
+      throw new CapacityTimeoutError(endpoint, analyzeJobId, waitedMs);
+    }
+
+    if (firstWait) {
+      await job.updateData({
+        ...job.data,
+        capacityWaitStartedAt: waitStartedAt,
+      });
+      await this.updateStage(analyzeJobId, WAITING_FOR_CAPACITY_STAGE);
+    }
+    await job.moveToDelayed(now + CAPACITY_RETRY_DELAY_MS, token);
+    throw new DelayedError();
+  }
+
+  /**
+   * Runs `fn` with a browser context it fully owns: acquires the context,
+   * runs `fn`, then always closes it. The caller already holds the job's
+   * gate slot (see acquireSlotOrDelay), so this never touches the gate.
    */
   protected async withGatedContext<T>(
     acquireContext: () => Promise<BrowserContext>,
     fn: (context: BrowserContext) => Promise<T>,
   ): Promise<T> {
-    this.concurrencyGate.acquire();
     let context: BrowserContext;
     try {
       context = await acquireContext();
     } catch (error) {
-      this.concurrencyGate.release();
       throw this.normalizeBrowserError(error);
     }
     try {
@@ -72,7 +121,6 @@ export abstract class BaseHeavyAnalyzeProcessor extends BaseAnalyzeProcessor {
       throw this.normalizeBrowserError(error);
     } finally {
       await context.close().catch(() => undefined);
-      this.concurrencyGate.release();
     }
   }
 
@@ -126,15 +174,12 @@ export abstract class BaseHeavyAnalyzeProcessor extends BaseAnalyzeProcessor {
       return { observations, crawlType: 'full', cacheHit: false };
     }
 
-    // keepContextOpen: the gate slot and context deliberately outlive this
-    // call - released together later via releaseContext(), not in a finally
-    // here.
-    this.concurrencyGate.acquire();
+    // keepContextOpen: the context deliberately outlives this call - closed
+    // later via releaseContext(), not in a finally here.
     let context: BrowserContext;
     try {
       context = await this.browserService.acquireContext();
     } catch (error) {
-      this.concurrencyGate.release();
       throw this.normalizeBrowserError(error);
     }
     try {
@@ -146,12 +191,10 @@ export abstract class BaseHeavyAnalyzeProcessor extends BaseAnalyzeProcessor {
         context,
         releaseContext: async () => {
           await context.close().catch(() => undefined);
-          this.concurrencyGate.release();
         },
       };
     } catch (error) {
       await context.close().catch(() => undefined);
-      this.concurrencyGate.release();
       throw this.normalizeBrowserError(error);
     }
   }

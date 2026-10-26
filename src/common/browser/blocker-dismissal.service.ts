@@ -169,7 +169,11 @@ export class BlockerDismissalService {
       ({ box, viewportWidth, viewportHeight }) => {
         const viewportArea = viewportWidth * viewportHeight;
         const minCoverage = 0.03;
-        const maxCoverage = 0.6;
+        // A full-screen consent dialog (common on mobile) is itself the
+        // blocker, so when the AI's own box covers most of the viewport the
+        // size cap that guards against hiding full-page backgrounds is lifted.
+        const boxCoverage = (box.width * box.height) / viewportArea;
+        const maxCoverage = boxCoverage >= 0.6 ? 1.01 : 0.6;
         const maxCenterDistanceFraction = 0.35; // of viewport diagonal
         const boxCenterX = box.x + box.width / 2;
         const boxCenterY = box.y + box.height / 2;
@@ -187,7 +191,18 @@ export class BlockerDismissalService {
         let bestOverlap: { el: Element; score: number } | null = null;
         let bestByDistance: { el: Element; distance: number } | null = null;
 
-        const candidates = document.querySelectorAll('body *');
+        // Consent managers often render inside an open shadow root, which
+        // querySelectorAll('body *') does not enter - without descending into
+        // them the real banner is invisible here and an unrelated sticky
+        // header ends up nearest the AI's box and gets hidden instead.
+        const candidates: Element[] = [];
+        const collect = (root: ParentNode) => {
+          root.querySelectorAll('*').forEach((el) => {
+            candidates.push(el);
+            if (el.shadowRoot) collect(el.shadowRoot);
+          });
+        };
+        collect(document.body);
         candidates.forEach((el) => {
           const style = window.getComputedStyle(el);
           if (style.position !== 'fixed' && style.position !== 'sticky') {
@@ -203,7 +218,10 @@ export class BlockerDismissalService {
           const boxArea = box.width * box.height;
           const inter = intersectionArea(rect);
           if (inter > 0) {
-            const score = inter / Math.min(rectArea, boxArea || rectArea);
+            // Intersection over union, not over the smaller area: a small
+            // sticky header sitting wholly inside a large AI box would
+            // otherwise score a perfect 1 and beat the real overlay.
+            const score = inter / (rectArea + boxArea - inter);
             if (!bestOverlap || score > bestOverlap.score) {
               bestOverlap = { el, score };
             }

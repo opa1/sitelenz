@@ -143,5 +143,5 @@ export abstract class BaseAnalyzeProcessor extends WorkerHost {
     });
   }
 
-  abstract process(job: Job<AnalyzeJobData>): Promise<void>;
+  abstract process(job: Job<AnalyzeJobData>, token?: string): Promise<void>;
 }

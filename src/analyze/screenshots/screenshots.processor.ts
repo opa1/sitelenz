@@ -1,6 +1,6 @@
 import { Logger } from '@nestjs/common';
 import { Processor } from '@nestjs/bullmq';
-import type { Job } from 'bullmq';
+import { DelayedError, type Job } from 'bullmq';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { BrowserService } from '../../common/browser/browser.service';
 import { ObservationCollector } from '../../common/browser/observation-collector.service';
@@ -57,11 +57,16 @@ export class ScreenshotsProcessor extends BaseHeavyAnalyzeProcessor {
     );
   }
 
-  async process(job: Job<AnalyzeJobData>): Promise<void> {
+  async process(job: Job<AnalyzeJobData>, token?: string): Promise<void> {
     const { analyzeJobId, url } = job.data;
-    let stage = 'resolving_observations';
+    let stage = 'waiting_for_capacity';
+    let holdsSlot = false;
 
     try {
+      await this.acquireSlotOrDelay(job, token);
+      holdsSlot = true;
+
+      stage = 'resolving_observations';
       await this.markRunning(analyzeJobId, stage);
       // keepContextOpen: on a fresh crawl (no cached full observation), stay
       // on the exact context/session the crawl just ran in for the desktop
@@ -108,6 +113,9 @@ export class ScreenshotsProcessor extends BaseHeavyAnalyzeProcessor {
         `Completed ${ENDPOINT} analyze job ${analyzeJobId} (cacheHit=${resolved.cacheHit}, desktop=${!!desktopEntry}, mobile=${!!mobileEntry})`,
       );
     } catch (error) {
+      // Job was put back in the queue to wait for a slot - not a failure.
+      if (error instanceof DelayedError) throw error;
+
       const err = error as Error & { code?: string };
       const errorMessage =
         error instanceof Error ? error.message : String(error);
@@ -140,6 +148,8 @@ export class ScreenshotsProcessor extends BaseHeavyAnalyzeProcessor {
             `Failed to enqueue failure webhook for analyze job ${analyzeJobId}: ${webhookError.message}`,
           );
         });
+    } finally {
+      if (holdsSlot) this.concurrencyGate.release();
     }
   }
 

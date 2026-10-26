@@ -2,8 +2,6 @@ import { Injectable, Logger } from '@nestjs/common';
 import Groq from 'groq-sdk';
 import { AppConfigService } from '../config';
 
-const VISION_MODEL = 'qwen/qwen3.6-27b';
-
 export interface BlockerBoundingBox {
   x: number;
   y: number;
@@ -68,7 +66,7 @@ export class GroqService {
   ): Promise<BlockerDetectionResult | null> {
     const base64 = screenshot.toString('base64');
     const response = await this.client.chat.completions.create({
-      model: VISION_MODEL,
+      model: this.appConfigService.groqVisionModel,
       temperature: 0,
       max_tokens: 500,
       // Qwen 3.6 27B is a reasoning model that otherwise emits a <think>...
@@ -119,14 +117,21 @@ export class GroqService {
     if (!parsed.hasBlocker) {
       return { hasBlocker: false, box: null };
     }
-    if (
-      parsed.box &&
-      typeof parsed.box.x === 'number' &&
-      typeof parsed.box.y === 'number' &&
-      typeof parsed.box.width === 'number' &&
-      typeof parsed.box.height === 'number'
-    ) {
-      return { hasBlocker: true, box: parsed.box };
+    // Models occasionally quote a coordinate ("y": "0"); accept numeric
+    // strings rather than discarding an otherwise-valid detection.
+    const box = parsed.box;
+    const toNumber = (v: unknown): number =>
+      typeof v === 'number'
+        ? v
+        : typeof v === 'string' && v.trim() !== ''
+          ? Number(v)
+          : NaN;
+    const x = toNumber(box?.x);
+    const y = toNumber(box?.y);
+    const width = toNumber(box?.width);
+    const height = toNumber(box?.height);
+    if (box && [x, y, width, height].every(Number.isFinite)) {
+      return { hasBlocker: true, box: { x, y, width, height } };
     }
     return null;
   }
